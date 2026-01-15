@@ -1,0 +1,49 @@
+﻿# Node.js / Bun
+node_modules/
+*.log
+.npm/
+
+# Build Output
+dist/
+dist-ssr/
+build/
+out/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+*.env.*
+!.env.example
+
+# Vite
+.vite/
+
+# Tauri / Rust
+src-tauri/target/
+**/target/
+**/*.rs.bk
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+src-tauri/sports_data.db
+supabase/.temp/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+
+# OS-specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

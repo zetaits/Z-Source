@@ -1,0 +1,4 @@
+project_id = "sebrwaypgnbsmrjsilkk"
+
+[functions.analyze-pick]
+verify_jwt = false

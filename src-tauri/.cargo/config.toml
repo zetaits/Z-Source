@@ -1,0 +1,3 @@
+[build]
+# Redirect build output to a folder outside of Desktop/OneDrive to avoid file locking issues
+target-dir = "C:/Users/Corso/.cargo_safe_builds/z_source_target"

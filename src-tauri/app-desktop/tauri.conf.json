@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v2/tooling/cli/schema.json",
+  "productName": "LyraTip Command Center",
+  "version": "0.1.0",
+  "identifier": "com.lyratip.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../../dist",
+    "devUrl": "http://localhost:8080"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "LyraTip Command Center",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "wix": {
+        "language": "es-ES"
+      }
+    }
+  }
+}
