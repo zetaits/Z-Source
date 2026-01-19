@@ -81,25 +81,39 @@ pub struct PlayerStats {
 pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
+        CREATE TABLE IF NOT EXISTS sports (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO sports VALUES ('football', 'Football');
+
         CREATE TABLE IF NOT EXISTS teams (
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            url TEXT
+            sport_id TEXT DEFAULT 'football' REFERENCES sports(id),
+            name TEXT NOT NULL,
+            url TEXT,
+            UNIQUE(sport_id, name)
         );
 
-        CREATE TABLE IF NOT EXISTS matches (
+        CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY,
-            date TEXT,
+            sport_id TEXT NOT NULL REFERENCES sports(id),
+            date TEXT NOT NULL,
             time TEXT,
+            venue TEXT,
+            url TEXT UNIQUE,
+            status TEXT, -- 'SCHEDULED', 'FINISHED'
             home_team_id INTEGER NOT NULL REFERENCES teams(id),
-            away_team_id INTEGER NOT NULL REFERENCES teams(id),
+            away_team_id INTEGER NOT NULL REFERENCES teams(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS football_stats (
+            event_id INTEGER PRIMARY KEY REFERENCES events(id),
             home_score INTEGER,
             away_score INTEGER,
             xg_home REAL,
             xg_away REAL,
-            referee TEXT,
-            venue TEXT,
-            url TEXT UNIQUE NOT NULL
+            referee TEXT
         );
 
         CREATE TABLE IF NOT EXISTS players (
@@ -110,7 +124,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS player_match_stats (
             id INTEGER PRIMARY KEY,
             player_id INTEGER NOT NULL REFERENCES players(id),
-            match_id INTEGER NOT NULL REFERENCES matches(id),
+            match_id INTEGER NOT NULL REFERENCES events(id),
             team_id INTEGER NOT NULL REFERENCES teams(id),
             
             position TEXT,
@@ -129,6 +143,33 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         );
         "#
     )?;
+
+    // Migration Check: If 'matches' exists, migrate data
+    let table_exists: bool = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='matches'",
+        [],
+        |row| row.get(0)
+    ).unwrap_or(false);
+
+    if table_exists {
+        println!(">>> [DB] Migrating legacy 'matches' to 'events' + 'football_stats'...");
+        conn.execute_batch(r#"
+            INSERT OR IGNORE INTO events (id, sport_id, date, time, venue, url, status, home_team_id, away_team_id)
+            SELECT 
+                id, 'football', date, time, venue, url, 
+                CASE WHEN home_score IS NOT NULL THEN 'FINISHED' ELSE 'SCHEDULED' END,
+                home_team_id, away_team_id
+            FROM matches;
+
+            INSERT OR IGNORE INTO football_stats (event_id, home_score, away_score, xg_home, xg_away, referee)
+            SELECT id, home_score, away_score, xg_home, xg_away, referee
+            FROM matches;
+
+            ALTER TABLE matches RENAME TO _matches_v1_backup;
+        "#)?;
+        println!(">>> [DB] Migration complete.");
+    }
+
     Ok(())
 }
 
