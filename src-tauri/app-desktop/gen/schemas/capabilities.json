@@ -1,1 +1,1 @@
-{}
+{"sidecar-capability":{"identifier":"sidecar-capability","description":"Allows sidecar execution","local":true,"windows":["*"],"permissions":[{"identifier":"shell:allow-execute","allow":[{"cmd":"binaries/flaresolverr","name":"flaresolverr","sidecar":true}]}]}}

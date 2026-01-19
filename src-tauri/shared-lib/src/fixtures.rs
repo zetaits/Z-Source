@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use headless_chrome::{Browser, LaunchOptions};
 use scraper::{Html, Selector};
 use serde::Serialize;
 use std::{thread, time::Duration};
@@ -17,31 +16,12 @@ pub struct MatchBasicInfo {
 }
 
 pub async fn scrape_fixtures(league_url: &str) -> Result<Vec<MatchBasicInfo>> {
-    println!(">>> [Scraper] Starting Headless Chrome for URL: {}", league_url);
+    println!(">>> [Scraper] Using FlareSolverr for URL: {}", league_url);
 
-    // 1. Launch Browser
-    let launch_options = LaunchOptions {
-        window_size: Some((1920, 1080)),
-        ..Default::default()
-    };
-    let browser = Browser::new(launch_options).context("Failed to launch browser")?;
-    let tab = browser.new_tab().context("Failed to create tab")?;
-
-    // 2. Configure UA to mimic real user
-    tab.set_user_agent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        None, 
-        None
-    )?;
-
-    println!(">>> [Scraper] Navigating...");
-    tab.navigate_to(league_url)?.wait_until_navigated()?;
-
-    // 3. Extract HTML
-    println!(">>> [Scraper] Page loaded. Waiting for render...");
-    thread::sleep(Duration::from_secs(3)); 
-    
-    let body_html = tab.find_element("body")?.get_content()?;
+    // 1. Get HTML via FlareSolverr
+    let body_html = crate::flare_solverr::get_html(league_url).await
+        .context("Failed to retrieve HTML from FlareSolverr")?;
+        
     println!(">>> [Scraper] HTML Content retrieved ({} bytes). Parsing...", body_html.len());
 
     let document = Html::parse_document(&body_html);
@@ -55,7 +35,7 @@ pub async fn scrape_fixtures(league_url: &str) -> Result<Vec<MatchBasicInfo>> {
     let match_url_selector = Selector::parse("td[data-stat='score'] a").unwrap();
     let report_selector = Selector::parse("td[data-stat='match_report'] a").unwrap();
     
-    // Venue Selector - Critical Fix
+    // Venue Selector
     let venue_selector = Selector::parse("td[data-stat='venue']").unwrap();
     let time_selector = Selector::parse("td[data-stat='start_time']").unwrap();
 

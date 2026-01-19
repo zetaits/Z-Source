@@ -3,8 +3,13 @@
 use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::State;
+use tauri::Manager;
 use shared_lib::analysis::{self, MatchPrediction};
 use serde::Serialize;
+use std::process::{Command, Stdio};
+use std::os::windows::process::CommandExt;
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // AppState to hold the DB connection safely
 struct AppState {
@@ -15,14 +20,14 @@ struct AppState {
 struct MatchPreview {
     id: i64,
     date: String,
-    time: String, // Added
+    time: String,
     home_team: String,
     away_team: String,
     score: String,
     status: String,
     xg_home: Option<f64>,
     xg_away: Option<f64>,
-    venue: Option<String>, // Added
+    venue: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -35,15 +40,17 @@ struct MatchAnalysisResult {
 fn get_match_analysis(state: State<AppState>, match_id: i64) -> Result<MatchAnalysisResult, String> {
     let conn = state.db.lock().map_err(|_| "Failed to lock DB".to_string())?;
     
-    // 1. Get Match Details
+    // 1. Get Match Details (Joined from events + football_stats)
     let mut stmt = conn.prepare(r#"
         SELECT 
-            m.id, m.date, h.name, a.name, m.home_score, m.away_score, m.xg_home, m.xg_away,
-            m.home_team_id, m.away_team_id, m.venue, m.time
-        FROM matches m
-        JOIN teams h ON m.home_team_id = h.id
-        JOIN teams a ON m.away_team_id = a.id
-        WHERE m.id = ?1
+            e.id, e.date, h.name, a.name, 
+            fs.home_score, fs.away_score, fs.xg_home, fs.xg_away,
+            e.home_team_id, e.away_team_id, e.venue, e.time
+        FROM events e
+        LEFT JOIN football_stats fs ON e.id = fs.event_id
+        JOIN teams h ON e.home_team_id = h.id
+        JOIN teams a ON e.away_team_id = a.id
+        WHERE e.id = ?1
     "#).map_err(|e| e.to_string())?;
 
     let (preview, home_id, away_id) = stmt.query_row([match_id], |row| {
@@ -53,6 +60,7 @@ fn get_match_analysis(state: State<AppState>, match_id: i64) -> Result<MatchAnal
             (Some(h), Some(a)) => format!("{}-{}", h, a),
             _ => "vs".to_string()
         };
+        // Status: 'FINISHED' check or score presence
         let status = if home_score.is_some() { "Analizado" } else { "Programado" };
         let venue: Option<String> = row.get(10).ok();
         let time: Option<String> = row.get(11).ok();
@@ -90,20 +98,22 @@ fn get_all_matches(state: State<AppState>) -> Result<Vec<MatchPreview>, String> 
     
     let mut stmt = conn.prepare(r#"
         SELECT 
-            m.id, 
-            m.date, 
+            e.id, 
+            e.date, 
             h.name as home_team, 
             a.name as away_team,
-            m.home_score, 
-            m.away_score,
-            m.xg_home,
-            m.xg_away,
-            m.venue,
-            m.time
-        FROM matches m
-        JOIN teams h ON m.home_team_id = h.id
-        JOIN teams a ON m.away_team_id = a.id
-        ORDER BY m.date ASC
+            fs.home_score, 
+            fs.away_score,
+            fs.xg_home,
+            fs.xg_away,
+            e.venue,
+            e.time
+        FROM events e
+        LEFT JOIN football_stats fs ON e.id = fs.event_id
+        JOIN teams h ON e.home_team_id = h.id
+        JOIN teams a ON e.away_team_id = a.id
+        WHERE e.sport_id = 'football' -- Filter by sport
+        ORDER BY e.date ASC
     "#).map_err(|e| e.to_string())?;
 
     let match_iter = stmt.query_map([], |row| {
@@ -154,8 +164,8 @@ async fn fetch_upcoming_matches(state: State<'_, AppState>, league_url: String) 
     println!(">>> [Tauri Command] Scrape success. Saving to DB...");
     let mut conn = state.db.lock().map_err(|_| "Failed to lock DB".to_string())?;
     
-    // Migration: Ensure teams have url column
-    let _ = conn.execute("ALTER TABLE teams ADD COLUMN url TEXT", []); // Lazy migration
+    // Migration: Ensure teams have url column (Done in init, but keeping for safety/legacy)
+    // let _ = conn.execute("ALTER TABLE teams ADD COLUMN url TEXT", []); 
 
     let mut count = 0;
     
@@ -191,11 +201,11 @@ async fn analyze_missing_teams(state: State<'_, AppState>, match_id: i64) -> Res
         
         // Query joining teams to get their URLs
         conn.query_row(r#"
-            SELECT m.url, h.url, a.url 
-            FROM matches m 
-            JOIN teams h ON m.home_team_id = h.id 
-            JOIN teams a ON m.away_team_id = a.id 
-            WHERE m.id = ?1
+            SELECT e.url, h.url, a.url 
+            FROM events e 
+            JOIN teams h ON e.home_team_id = h.id 
+            JOIN teams a ON e.away_team_id = a.id 
+            WHERE e.id = ?1
         "#, [match_id], |row| {
             Ok((
                 row.get(0)?,
@@ -209,8 +219,6 @@ async fn analyze_missing_teams(state: State<'_, AppState>, match_id: i64) -> Res
     println!(">>> [Analysis] processing match: {}. Home URL: {:?}, Away URL: {:?}", match_url, home_url, away_url);
 
     // 2. Resolve Team URLs
-    // If URLs are missing in DB, we try to fallback or error. 
-    // Since user just synced, they should be there.
     let h_url = home_url.ok_or_else(|| "Missing Home Team URL in DB. Please Sync Fixtures again.".to_string())?;
     let a_url = away_url.ok_or_else(|| "Missing Away Team URL in DB. Please Sync Fixtures again.".to_string())?;
 
@@ -219,7 +227,6 @@ async fn analyze_missing_teams(state: State<'_, AppState>, match_id: i64) -> Res
     
     for team_url in teams {
         println!(">>> [Analysis] Processing History for: {}", team_url);
-        // ... (existing logic)
         let history_urls = shared_lib::team_schedule::get_team_match_history(&team_url).await
             .map_err(|e| format!("Failed to get history for {}: {}", team_url, e))?;
 
@@ -229,8 +236,13 @@ async fn analyze_missing_teams(state: State<'_, AppState>, match_id: i64) -> Res
             // Check if exists
             let exists: bool = {
                 let conn = state.db.lock().map_err(|_| "DB Lock Error".to_string())?;
-                conn.query_row("SELECT 1 FROM matches WHERE url = ?1 AND home_score IS NOT NULL", [&hist_url], |_| Ok(true))
-                    .unwrap_or(false)
+                // Check if event exists and has stats (finished)
+                conn.query_row(r#"
+                    SELECT 1 FROM events e 
+                    JOIN football_stats fs ON e.id = fs.event_id 
+                    WHERE e.url = ?1
+                "#, [&hist_url], |_| Ok(true))
+                .unwrap_or(false)
             };
 
             if exists {
@@ -259,43 +271,64 @@ fn main() {
     let cwd = std::env::current_dir().unwrap_or_default();
     println!(">>> [Main] Current Working Directory: {:?}", cwd);
     
-    // Try to locate DB relative to CWD
-    // We expect it in src-tauri/sports_data.db
+    // Try to locate DB
     let db_path = if cwd.join("../sports_data.db").exists() {
-        // Run from app-desktop
         "../sports_data.db"
     } else if cwd.join("sports_data.db").exists() {
-        // Run from src-tauri
         "sports_data.db"
     } else {
-        // Fallback or potentially opening new file
-        println!(">>> [Main] Warning: existing sports_data.db not found in usual relative paths. Defaulting to ../sports_data.db");
+        println!(">>> [Main] Warning: sports_data.db not found. Defaulting to ../sports_data.db");
         "../sports_data.db"
     };
 
     println!(">>> [Main] Opening Database at: {}", db_path);
     let conn = Connection::open(db_path).expect("Failed to open valid sports_data.db");
     
-    // Initialize DB Schema (Idempotent)
+    // Initialize DB Schema 
     println!(">>> [Main] Initializing Database Schema...");
     shared_lib::db::init_db(&conn).expect("Failed to initialize database schema");
 
-    // Migration: Ensure time column exists (Ignore error if exists)
-    let _ = conn.execute("ALTER TABLE matches ADD COLUMN time TEXT DEFAULT ''", []);
-
-    // TEMP: Clear fixtures as requested by user (Re-enabled)
-    println!(">>> [Main] Clearing existing fixtures (requested)...");
-    conn.execute("DELETE FROM matches WHERE home_score IS NULL", []).expect("Failed to clear fixtures");
-
-    
-    // Quick check if schema exists
-    let table_check: Result<i32, _> = conn.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='teams'", [], |r| r.get(0));
-    match table_check {
-        Ok(c) => println!(">>> [Main] DB Check: Found 'teams' table? {}", c > 0),
-        Err(e) => println!(">>> [Main] DB Check Error: {}", e),
-    }
+    // Clear fixtures logic (Updated to use events table if user requested clear)
+    // conn.execute("DELETE FROM events WHERE status = 'SCHEDULED'", []).ok();
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Path Resolution
+            let binary_name = "flaresolverr-x86_64-pc-windows-msvc.exe";
+            let binary_path = if cfg!(debug_assertions) {
+                // Dev: src-tauri/binaries (Relative to app-desktop means ../binaries)
+                std::env::current_dir()?.join("../binaries").join(binary_name)
+            } else {
+                // Prod: In resources/binaries
+                app.path().resource_dir()?.join("binaries").join(binary_name)
+            };
+
+            println!("[Sidecar] Launching FlareSolverr from: {:?}", binary_path);
+
+            if !binary_path.exists() {
+                 eprintln!("[Sidecar Error] Binary not found at: {:?}", binary_path);
+            } else {
+                let child = Command::new(&binary_path)
+                    .env("HOST", "127.0.0.1")
+                    .env("PORT", "8191")
+                    .env("LOG_LEVEL", "info") // Info is enough usually
+                    .creation_flags(CREATE_NO_WINDOW) 
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .spawn();
+
+                match child {
+                    Ok(c) => {
+                        println!("[Sidecar] FlareSolverr started (PID: {:?})", c.id());
+                        println!("[Sidecar] Waiting 3s for startup...");
+                        std::thread::sleep(std::time::Duration::from_secs(3));
+                        println!("[Sidecar] Startup wait complete. Check console for FlareSolverr logs.");
+                    },
+                    Err(e) => eprintln!("[Sidecar Error] Failed to spawn: {}", e),
+                }
+            }
+            Ok(())
+        })
         .manage(AppState { db: Mutex::new(conn) })
         .invoke_handler(tauri::generate_handler![get_match_analysis, get_all_matches, fetch_upcoming_matches, analyze_missing_teams])
         .run(tauri::generate_context!())

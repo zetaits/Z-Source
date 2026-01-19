@@ -1,0 +1,19 @@
+{
+    "identifier": "sidecar-capability",
+    "description": "Allows sidecar execution",
+    "windows": [
+        "*"
+    ],
+    "permissions": [
+        {
+            "identifier": "shell:allow-execute",
+            "allow": [
+                {
+                    "name": "flaresolverr",
+                    "cmd": "binaries/flaresolverr",
+                    "sidecar": true
+                }
+            ]
+        }
+    ]
+}

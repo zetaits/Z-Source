@@ -3,6 +3,7 @@ import { MatchCard, MatchData } from "@/components/MatchCard";
 import { Activity, RefreshCw, TrendingUp, Database, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Area, AreaChart, CartesianGrid, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -32,25 +33,29 @@ const PERFORMANCE_DATA = [
 export default function DashboardHome() {
     const [matches, setMatches] = useState<MatchData[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedSport, setSelectedSport] = useState("football");
 
     useEffect(() => {
         async function loadMatches() {
+            setLoading(true); // Reset loading when sport changes
             try {
+                // Future: pass { sport: selectedSport } argument
                 const data = await invoke<MatchPreview[]>('get_all_matches');
+                
                 // Transform API data to UI MatchData format
                 const uiMatches: MatchData[] = data.map(m => ({
                     id: m.id.toString(),
                     home: m.home_team,
                     away: m.away_team,
                     date: m.date,
-                    venue: "Unknown Venue", // DB doesn't always return venue in list query yet
+                    venue: "Unknown Venue", 
                     score: m.score,
                     status: m.status as any,
-                    probability: m.status === 'Analizado' ? 85 : undefined, // Placeholder probability until analysis ran on all
+                    probability: m.status === 'Analizado' ? 85 : undefined,
                     xg: { home: m.xg_home, away: m.xg_away }
                 }));
-                // Show top 3 recent matches
-                setMatches(uiMatches.slice(0, 3));
+                // Show top 6 matches for better visibility
+                setMatches(uiMatches.slice(0, 6));
             } catch (err) {
                 console.error("Failed to load matches", err);
             } finally {
@@ -58,15 +63,26 @@ export default function DashboardHome() {
             }
         }
         loadMatches();
-    }, []);
+    }, [selectedSport]);
 
     return (
         <div className="space-y-8 animate-fade-in pb-10">
+            {/* Sport Selector */}
+            <div className="flex justify-center md:justify-start">
+                 <Tabs value={selectedSport} onValueChange={setSelectedSport} className="w-[400px]">
+                    <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="football">Football</TabsTrigger>
+                        <TabsTrigger value="basketball" disabled>Basketball</TabsTrigger>
+                        <TabsTrigger value="tennis" disabled>Tennis</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+
             {/* Header with Health Check */}
             <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Executive Summary</h2>
-                    <p className="text-muted-foreground">Estado del sistema y rendimiento del modelo.</p>
+                    <p className="text-muted-foreground">Estado del sistema y rendimiento del modelo ({selectedSport}).</p>
                 </div>
 
                 {/* Health Check Widget */}

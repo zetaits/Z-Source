@@ -24,6 +24,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "../binaries/**/*"
+    ],
     "targets": "all",
     "icon": [
       "icons/icon.ico"

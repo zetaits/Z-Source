@@ -1,12 +1,6 @@
 mod league_crawler;
-mod match_stats;
-mod team_schedule;
-pub mod fixtures;
-mod match_stats;
-mod team_schedule;
 
 use anyhow::Result;
-// use chrono::NaiveDateTime; // Not currently used for parsing until scraper extracts date
 use shared_lib::db::{init_db, save_match_complete};
 use rusqlite::Connection;
 use std::{thread, time::Duration};
@@ -23,6 +17,7 @@ async fn main() -> Result<()> {
     let league_url = "https://fbref.com/en/comps/9/Premier-League-Stats"; // Configurable
     println!("Step 1: Crawling League: {}", league_url);
     
+    // league_crawler is still local for now
     let teams = league_crawler::get_teams(league_url).await?;
     println!("Found {} teams.", teams.len());
     
@@ -30,18 +25,15 @@ async fn main() -> Result<()> {
     if let Some(team) = teams.first() {
         println!("\nStep 2: Processing Team: {}", team.name);
         
-        let match_urls = team_schedule::get_team_match_history(&team.base_url).await?;
+        let match_urls = shared_lib::team_schedule::get_team_match_history(&team.base_url).await?;
         println!("Found {} total matches for {}.", match_urls.len(), team.name);
 
         println!("\nStep 3: Processing Matches (Deduplication Active)...");
         
         for (i, url) in match_urls.iter().enumerate() {
             // DEDUPLICATION CHECK (Relational)
-            // Ideally we move this check to a helper in db.rs, but for now we can check via query
-            // Or just rely on 'save_match_complete' which handles idempotency.
-            // But to print "Skipping" we need to check.
             let exists: bool = conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM matches WHERE url = ?1)",
+                "SELECT EXISTS(SELECT 1 FROM events WHERE url = ?1)",
                 [url],
                 |row| row.get(0),
             )?;
@@ -53,7 +45,7 @@ async fn main() -> Result<()> {
 
             println!("[{}/{}] \u{1f504} Scraping: {}", i+1, match_urls.len(), url);
             
-            match match_stats::scrape_match(url).await {
+            match shared_lib::match_stats::scrape_match(url).await {
                 Ok(stats) => {
                     // Save Relational Data
                     // Date text is currently fixed or extracted? 

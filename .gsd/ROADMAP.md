@@ -12,20 +12,22 @@
 ## Phases
 
 ### Phase 1: Foundation & Polymorphism
-**Status**: ⬜ Not Started
+**Status**: ✅ Completed
 **Objective**: Refactorizar la arquitectura actual para soportar "Deportes" como entidades abstractas y preparar la BD para múltiples tipos de stats.
 **Key Deliverables**:
 - Esquema DB migrado a `Events`, `Sports`, `MarketData`.
 - Refactorización de Rust structs para usar Traits/Generics donde aplique.
 - Interfaz básica con selector de deportes (solo Fútbol activo).
 
-### Phase 2: Football Analytics Core (Refinement)
-**Status**: ⬜ Not Started
-**Objective**: Perfeccionar el modelo de fútbol actual, añadiendo mercados secundarios y limpieza de datos.
+### Phase 2: Data Pipeline & Analytics Core
+**Status**: 🚧 In Progress
+**Objective**: Establecer un pipeline de datos robusto (bypass antibot) y perfeccionar el modelo de fútbol.
 **Key Deliverables**:
-- Modelo Poisson expandido a Córners y Tarjetas (usando promedios simples si Poisson no aplica perfecto).
-- Scraping robusto de datos necesarios para estos mercados.
-- Visualización de "Caja de Cristal" (Probabilidades crudas).
+- **Infrastructure**: Integración de **FlareSolverr** para scraping robusto (bypass Cloudflare).
+- **Scraper Rework**: Adaptación del bot para usar FlareSolverr y manejo de errores resiliente.
+- **Model**: Modelo Poisson expandido a Córners y Tarjetas.
+- **Data**: Limpieza de datos y normalización de nombres de equipos.
+- **UI**: Visualización de "Caja de Cristal" (Probabilidades crudas).
 
 ### Phase 3: Market Integration (The Scanner)
 **Status**: ⬜ Not Started

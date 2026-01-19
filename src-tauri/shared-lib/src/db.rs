@@ -190,12 +190,9 @@ fn get_or_insert_player(tx: &Transaction, name: &str) -> Result<i64> {
 pub fn save_match_complete(conn: &mut Connection, stats: &FootballMatchStats, date: &str, url: &str) -> Result<()> {
     let tx = conn.transaction()?;
 
-    // 1. Check Idempotency (Full Update Rule: If exists, we might want to update it if it was just a fixture)
-    // But for "save_match_complete" (which is detailed stats), we strictly want to save if not fully present.
-    // If it exists as a fixture (score is NULL), we UPDATE it.
-    // If it exists as a match (score NOT NULL), we skip (already scraped).
+    // 1. Check Idempotency based on 'events' table
     let existing_id: Option<i64> = tx.query_row(
-        "SELECT id FROM matches WHERE url = ?1",
+        "SELECT id FROM events WHERE url = ?1",
         params![url],
         |row| row.get(0)
     ).optional()?;
@@ -204,71 +201,75 @@ pub fn save_match_complete(conn: &mut Connection, stats: &FootballMatchStats, da
     let home_id = get_or_insert_team(&tx, &stats.home_stats.name)?;
     let away_id = get_or_insert_team(&tx, &stats.away_stats.name)?;
 
+    let match_id;
+
     if let Some(id) = existing_id {
-        // Check if it's already completed (has scores) - wait, querying to check score
-        let has_score: bool = tx.query_row(
-            "SELECT home_score IS NOT NULL FROM matches WHERE id = ?1",
+        // If event exists, check if stats exist (status = FINISHED)
+        let status: Option<String> = tx.query_row(
+            "SELECT status FROM events WHERE id = ?1",
             params![id],
             |row| row.get(0)
         )?;
-        
-        if has_score {
-             return Ok(()); // Already done
-        } else {
-            // Update existing fixture to full match
-            tx.execute(
-                r#"
-                UPDATE matches SET 
-                    date = ?1, home_team_id = ?2, away_team_id = ?3,
-                    home_score = ?4, away_score = ?5, xg_home = ?6, xg_away = ?7,
-                    referee = ?8, venue = ?9
-                WHERE id = ?10
-                "#,
-                params![
-                    date, home_id, away_id,
-                    stats.home_stats.goals, stats.away_stats.goals,
-                    stats.home_stats.xg, stats.away_stats.xg,
-                    stats.context.referee, stats.context.venue,
-                    id
-                ]
-            )?;
-            // Continue to save players...
-            let match_id = id;
-            save_team_players(&tx, match_id, home_id, &stats.home_stats.players)?;
-            save_team_players(&tx, match_id, away_id, &stats.away_stats.players)?;
-            tx.commit()?;
+
+        // If 'FINISHED' we assume it's done, unless we force update. 
+        // For now, if stats present (football_stats table has entry), skip.
+        let stats_exist: bool = tx.query_row(
+            "SELECT 1 FROM football_stats WHERE event_id = ?1",
+            params![id],
+            |_| Ok(true)
+        ).unwrap_or(false);
+
+        if stats_exist {
             return Ok(());
         }
+
+        // Update event (metadata) + Insert Stats
+        tx.execute(
+            "UPDATE events SET date = ?1, venue = ?2, status = 'FINISHED' WHERE id = ?3",
+            params![date, stats.context.venue, id]
+        )?;
+        
+        match_id = id;
+    } else {
+        // Insert New Event
+        tx.execute(
+            r#"
+            INSERT INTO events (
+                sport_id, date, status, home_team_id, away_team_id, 
+                time, venue, url
+            ) VALUES ('football', ?1, 'FINISHED', ?2, ?3, '00:00', ?4, ?5)
+            "#,
+            params![
+                date,
+                home_id,
+                away_id,
+                stats.context.venue,
+                url
+            ],
+        )?;
+        match_id = tx.last_insert_rowid();
     }
 
-    // 3. Insert New Match
+    // 3. Upsert Football Stats
     tx.execute(
         r#"
-        INSERT INTO matches (
-            date, home_team_id, away_team_id, 
-            home_score, away_score, xg_home, xg_away,
-            referee, venue, url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        INSERT OR REPLACE INTO football_stats (
+            event_id, home_score, away_score, xg_home, xg_away, referee
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         "#,
         params![
-            date,
-            home_id,
-            away_id,
+            match_id,
             stats.home_stats.goals,
             stats.away_stats.goals,
             stats.home_stats.xg,
             stats.away_stats.xg,
-            stats.context.referee,
-            stats.context.venue,
-            url
-        ],
+            stats.context.referee
+        ]
     )?;
-    let match_id = tx.last_insert_rowid();
 
-    // 4. Save Players (Home)
+    // 4. Save Players
+    // Note: match_id here refers to event_id. player_match_stats still references it.
     save_team_players(&tx, match_id, home_id, &stats.home_stats.players)?;
-
-    // 5. Save Players (Away)
     save_team_players(&tx, match_id, away_id, &stats.away_stats.players)?;
 
     tx.commit()?;
@@ -276,54 +277,47 @@ pub fn save_match_complete(conn: &mut Connection, stats: &FootballMatchStats, da
 }
 
 fn upsert_team(tx: &Transaction, name: &str, url: Option<&str>) -> Result<i64> {
-    let mut stmt = tx.prepare("SELECT id FROM teams WHERE name = ?1")?;
+    let mut stmt = tx.prepare("SELECT id FROM teams WHERE name = ?1 AND sport_id = 'football'")?;
     let mut rows = stmt.query(params![name])?;
     
     if let Some(row) = rows.next()? {
         let id: i64 = row.get(0)?;
-        // Update URL if provided
         if let Some(u) = url {
             tx.execute("UPDATE teams SET url = ?1 WHERE id = ?2", params![u, id])?;
         }
         return Ok(id);
     }
     
-    // Insert new
-    tx.execute("INSERT INTO teams (name, url) VALUES (?1, ?2)", params![name, url])?;
+    // Insert new (default sport_id='football')
+    tx.execute("INSERT INTO teams (name, url, sport_id) VALUES (?1, ?2, 'football')", params![name, url])?;
     Ok(tx.last_insert_rowid())
 }
 
 pub fn save_fixture(conn: &mut Connection, home_team: &str, away_team: &str, date: &str, url: &str, venue: &str, time: &str, home_url: &str, away_url: &str) -> Result<()> {
     let tx = conn.transaction()?;
     
-    // 1. Resolve Teams (and save URLs)
     let home_id = upsert_team(&tx, home_team, Some(home_url))?;
     let away_id = upsert_team(&tx, away_team, Some(away_url))?;
 
-    // 2. Check Upsert
     let existing_id: Option<i64> = tx.query_row(
-        "SELECT id FROM matches WHERE url = ?1",
+        "SELECT id FROM events WHERE url = ?1",
         params![url],
         |row| row.get(0)
     ).optional()?;
 
     if let Some(id) = existing_id {
-        // Found: Update date, venue, time if needed
        tx.execute(
-           "UPDATE matches SET date = ?1, venue = ?2, time = ?3 WHERE id = ?4 AND home_score IS NULL",
+           "UPDATE events SET date = ?1, venue = ?2, time = ?3 WHERE id = ?4 AND status != 'FINISHED'",
            params![date, venue, time, id]
        )?;
     } else {
-        // Insert new fixture (Scores NULL)
         tx.execute(
             r#"
-            INSERT INTO matches (
-                date, home_team_id, away_team_id, 
-                home_score, away_score, xg_home, xg_away,
-                referee, venue, time, url
-            ) VALUES (?1, ?2, ?3, NULL, NULL, NULL, NULL, NULL, ?4, ?5, ?6)
+            INSERT INTO events (
+                sport_id, date, time, venue, url, status, home_team_id, away_team_id
+            ) VALUES ('football', ?1, ?2, ?3, ?4, 'SCHEDULED', ?5, ?6)
             "#,
-            params![date, home_id, away_id, venue, time, url]
+            params![date, time, venue, url, home_id, away_id]
         )?;
     }
     
@@ -344,22 +338,6 @@ fn save_team_players(tx: &Transaction, match_id: i64, team_id: i64, players: &[P
 
     for p in players {
         let player_id = get_or_insert_player(tx, &p.name)?;
-        
-        // Note: goals/assists are not explicitly in PlayerStats struct shown in logs?
-        // Ah, looking at match_stats.rs, they ARE in PartialPlayerStats, but were they mapped to PlayerStats?
-        // Let's verify PlayerStats struct above. It DOES NOT have goals/assists explicitly visible in the simplified struct 
-        // I wrote in Step 990? NO, Step 990 `PlayerStats` has many fields but NOT goals/assists.
-        // Wait, `match_stats.rs` defines `PlayerStats` too? No, it imports from `shared_lib::db`.
-        // The previous `shared_lib::db::PlayerStats` (Step 990) did NOT have `goals` or `assists`.
-        // It had `xg`, `shots`, `sca` etc.
-        // BUT the `PartialPlayerStats` in `match_stats.rs` HAS `goals`, `assists`.
-        // I should Add `goals`, `assists` to `PlayerStats` struct in `db.rs` to persist them!
-        // I will add them now in the struct definition above.
-        
-        // Wait, I can't re-edit the file content I just prepared in the `CodeContent` block.
-        // Implementation below assumes they might be missing or need to be added.
-        // I will Add `pub goals: u32` and `pub assists: u32` to the struct definition in this very Write call.
-        // And use them in the insert.
         
         stmt_insert_stats.execute(params![
             player_id,

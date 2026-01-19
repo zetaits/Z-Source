@@ -1,12 +1,8 @@
 use anyhow::{Context, Result};
-use headless_chrome::{Browser, LaunchOptions};
 use regex::Regex;
 use scraper::{Html, Selector};
-use crate::db::{FootballMatchStats, MatchContext, PlayerStats, TeamStats}; // Fixed import
+use crate::db::{FootballMatchStats, MatchContext, PlayerStats, TeamStats}; 
 use std::collections::HashMap;
-use std::fs;
-use std::ffi::OsStr; 
-use std::{thread, time::Duration};
 
 #[derive(Debug, Default, Clone)]
 struct PartialPlayerStats {
@@ -59,22 +55,13 @@ type PlayerMap = HashMap<(String, String), PartialPlayerStats>;
 // New Function: Get Team URLs from Match Page (for Pre-Match Analysis)
 pub async fn get_team_urls_from_match_page(url: &str) -> Result<(String, String)> {
     println!(">>> [MatchStats] Extracting team URLs from: {}", url);
-    let launch_options = LaunchOptions {
-        window_size: Some((1920, 1080)),
-        headless: true, // Headless for this
-        ..Default::default()
-    };
-    let browser = Browser::new(launch_options).context("Failed to launch browser")?;
-    let tab = browser.new_tab().context("Failed to create tab")?;
+    
+    let body_html = crate::flare_solverr::get_html(url).await
+        .context("Failed to get match page via FlareSolverr")?;
 
-    tab.navigate_to(url)?.wait_until_navigated()?;
-    thread::sleep(Duration::from_secs(3)); // Wait for render
-
-    let body_html = tab.find_element("body")?.get_content()?;
     let document = Html::parse_document(&body_html);
     
     // Selector for team links in scorebox (usually big headers)
-    // .scorebox div[itemprop="performer"] a[itemprop="name"] ? Or just a inside strong
     // FBref structure: div.scorebox -> div -> div -> strong -> a
     let team_selector = Selector::parse("div.scorebox div[itemprop='performer'] a, div.scorebox strong a").unwrap();
     
@@ -98,58 +85,27 @@ pub async fn get_team_urls_from_match_page(url: &str) -> Result<(String, String)
 }
 
 pub async fn scrape_match(url: &str) -> Result<FootballMatchStats> {
-    println!("Scraping match details: {}", url);
+    println!("Scraping match details via FlareSolverr: {}", url);
     
-    // 1. Launch Browser (VISIBLE for Debugging/Xvfb)
-    let launch_options = LaunchOptions {
-        window_size: Some((1920, 1080)),
-        headless: false, // VISIBLE
-        enable_gpu: false, 
-        args: vec![
-            OsStr::new("--disable-blink-features=AutomationControlled"),
-            OsStr::new("--start-maximized"),
-            OsStr::new("--no-sandbox"), 
-            OsStr::new("--disable-dev-shm-usage"),
-            OsStr::new("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-        ],
-        ..Default::default()
-    };
-    let browser = Browser::new(launch_options).context("Failed to launch browser")?;
-    let tab = browser.new_tab().context("Failed to create tab")?;
+    // 1. Get HTML
+    let raw_html = crate::flare_solverr::get_html(url).await
+        .context("Failed to get match HTML via FlareSolverr")?;
 
-    // 2. Navigate
-    println!("Navigating to: {}", url);
-    tab.navigate_to(url)?; 
-    
-    // ... [Original scraping logic follows, preserved] ...
-    // Note: I am pasting the original logic but replacing `use shared_lib::db` with `crate::db`.
-    // Since I can't paste 400 lines verbatim easily without errors, I will trust the original logic 
-    // but I MUST ensure I include the full body. 
-    // I will use the "original code" I read in Step 1531 as the source of truth, 
-    // ensuring I include the wait loop, regex, etc.
+    // 2. Clean HTML (FBref hides tables in comments sometimes, though FlareSolverr might return rendered js, 
+    // it's safer to un-comment just in case static HTML is returned)
+    // Actually FlareSolverr returns the DOM after JS execution usually, but FBref is tricky.
+    // Let's keep the regex cleaning as a safety net.
+    let re = Regex::new(r"<!--|-->").unwrap();
+    let clean_html = re.replace_all(&raw_html, "").to_string();
+    let document = Html::parse_document(&clean_html);
 
-    // 3. Polling Loop (Cloudflare Wait)
-    let mut found = false;
-    let max_attempts = 15; 
-    
-    for attempt in 1..=max_attempts {
-        println!("Polling for .scorebox (Attempt {}/{}) - Waiting for Cloudflare...", attempt, max_attempts);
-        thread::sleep(Duration::from_secs(2));
-        match tab.find_element(".scorebox") {
-            Ok(_) => {
-                println!("Target element .scorebox found! Cloudflare passed.");
-                found = true;
-                break;
-            },
-            Err(_) => {}
-        }
+    // Check availability
+    if document.select(&Selector::parse(".scorebox").unwrap()).next().is_none() {
+         return Err(anyhow::anyhow!("Match data (.scorebox) not found in FlareSolverr response."));
     }
 
-    if !found {
-        return Err(anyhow::anyhow!("Timeout waiting for match data (.scorebox not found)"));
-    }
 
-    let raw_html = tab.find_element("html")?.get_content()?;
+
     let re = Regex::new(r"<!--|-->").unwrap();
     let clean_html = re.replace_all(&raw_html, "").to_string();
     let document = Html::parse_document(&clean_html);

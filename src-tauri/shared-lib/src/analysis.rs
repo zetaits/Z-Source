@@ -14,13 +14,14 @@ pub struct MatchPrediction {
 
 // Helper: Get league average goals (home and away)
 fn get_league_averages(conn: &Connection) -> Result<(f64, f64)> {
-    // Only count matches that have scores (status = 'FINISHED' ideally, but here distinct by scores not null)
+    // Only count matches that have scores from football_stats
     let mut stmt = conn.prepare("
         SELECT 
-            AVG(home_score) as avg_home, 
-            AVG(away_score) as avg_away 
-        FROM matches
-        WHERE home_score IS NOT NULL
+            AVG(fs.home_score) as avg_home, 
+            AVG(fs.away_score) as avg_away 
+        FROM events e
+        JOIN football_stats fs ON e.id = fs.event_id
+        WHERE e.sport_id = 'football' AND fs.home_score IS NOT NULL
     ")?;
     
     let mut rows = stmt.query([])?;
@@ -38,11 +39,14 @@ fn get_league_averages(conn: &Connection) -> Result<(f64, f64)> {
 fn get_team_recent_stats(conn: &Connection, team_id: i64, limit: usize) -> Result<(f64, f64)> {
     let sql = r#"
         SELECT 
-            AVG(CASE WHEN home_team_id = ?1 THEN home_score ELSE away_score END) as scored,
-            AVG(CASE WHEN home_team_id = ?1 THEN away_score ELSE home_score END) as conceded
-        FROM matches 
-        WHERE (home_team_id = ?1 OR away_team_id = ?1) AND home_score IS NOT NULL
-        ORDER BY date DESC
+            AVG(CASE WHEN e.home_team_id = ?1 THEN fs.home_score ELSE fs.away_score END) as scored,
+            AVG(CASE WHEN e.home_team_id = ?1 THEN fs.away_score ELSE fs.home_score END) as conceded
+        FROM events e
+        JOIN football_stats fs ON e.id = fs.event_id
+        WHERE (e.home_team_id = ?1 OR e.away_team_id = ?1) 
+          AND e.sport_id = 'football'
+          AND fs.home_score IS NOT NULL
+        ORDER BY e.date DESC
         LIMIT ?2
     "#;
     
