@@ -47,3 +47,9 @@ supabase/.temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Binaries (Large files >100MB excluded)
+binaries/
+src-tauri/binaries/
+src-tauri/app-desktop/binaries/
+src-tauri/app-desktop/src-tauri/binaries/
