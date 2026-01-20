@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BINARIES_DIR = path.join(PROJECT_ROOT, 'src-tauri', 'binaries');
+const INTERNAL_DIR = path.join(BINARIES_DIR, '_internal');
 const FLARESOLVERR_EXE = path.join(BINARIES_DIR, 'flaresolverr-x86_64-pc-windows-msvc.exe');
 const VERSION = 'v3.3.21';
 const DOWNLOAD_URL = `https://github.com/FlareSolverr/FlareSolverr/releases/download/${VERSION}/flaresolverr_windows_x64.zip`;
@@ -41,12 +42,12 @@ async function downloadFile(url, dest) {
 }
 
 async function main() {
-    if (fs.existsSync(FLARESOLVERR_EXE)) {
-        console.log('✅ FlareSolverr binary already exists. Skipping download.');
+    if (fs.existsSync(FLARESOLVERR_EXE) && fs.existsSync(INTERNAL_DIR)) {
+        console.log('✅ FlareSolverr binary and dependencies already exist. Skipping download.');
         return;
     }
 
-    console.log('⬇️  FlareSolverr binary missing. Downloading...');
+    console.log('⬇️  FlareSolverr components missing (EXE or _internal). Downloading...');
 
     if (!fs.existsSync(BINARIES_DIR)) {
         fs.mkdirSync(BINARIES_DIR, { recursive: true });
