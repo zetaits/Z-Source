@@ -42,12 +42,14 @@ async function downloadFile(url, dest) {
 }
 
 async function main() {
-    if (fs.existsSync(FLARESOLVERR_EXE) && fs.existsSync(INTERNAL_DIR)) {
+    const chromeDir = path.join(INTERNAL_DIR, 'chrome');
+
+    if (fs.existsSync(FLARESOLVERR_EXE) && fs.existsSync(INTERNAL_DIR) && fs.existsSync(chromeDir)) {
         console.log('✅ FlareSolverr binary and dependencies already exist. Skipping download.');
         return;
     }
 
-    console.log('⬇️  FlareSolverr components missing (EXE or _internal). Downloading...');
+    console.log('⬇️  FlareSolverr components missing (EXE, _internal, or chrome). Downloading...');
 
     if (!fs.existsSync(BINARIES_DIR)) {
         fs.mkdirSync(BINARIES_DIR, { recursive: true });
