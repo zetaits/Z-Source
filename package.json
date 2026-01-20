@@ -9,8 +9,9 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "vite build && tauri build"
+    "setup:binaries": "node scripts/download-flaresolverr.js",
+    "tauri:dev": "npm run setup:binaries && tauri dev",
+    "tauri:build": "npm run setup:binaries && vite build && tauri build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -73,6 +74,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",
+    "adm-zip": "^0.5.16",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",

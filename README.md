@@ -16,8 +16,8 @@ npm run dev
 ### Ejecutar como app de escritorio (Tauri)
 - Requisitos: Rust + Cargo + toolchain de Tauri (incluye WebView2 en Windows).
 - Instala CLI: `npm install @tauri-apps/cli --save-dev` (ya en package.json).
-- Dev desktop: en una terminal `npm run dev` (Vite en 8080), en otra `tauri dev` o usa `npm run tauri:dev`.
-- Build .exe: `npm run tauri:build` (genera instalador/ejecutable en `src-tauri/target/release`).
+- Dev desktop: `npm run tauri:dev`. **Nota:** Este comando descargará automáticamente las dependencias binarias necesarias (FlareSolverr, ~700MB) si no están presentes.
+- Build .exe: `npm run tauri:build` (también verifica binarios antes de construir).
 
 Variables de entorno esperadas (en Supabase Edge y en el cliente):
 - `GEMINI_API_KEY` para la función de análisis (ya hay un fallback en el código, pero usa la variable para producción).
