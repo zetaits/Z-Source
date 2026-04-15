@@ -1,4 +1,4 @@
-﻿# Node.js / Bun
+# Node.js / Bun
 node_modules/
 *.log
 .npm/
@@ -47,3 +47,6 @@ supabase/.temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# AI Tools
+.claude/

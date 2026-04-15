@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v2/tooling/cli/schema.json",
-  "productName": "LyraTip Command Center",
+  "productName": "Z-Source",
   "version": "0.1.0",
-  "identifier": "com.lyratip.desktop",
+  "identifier": "com.zsource.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -15,7 +15,8 @@
     },
     "windows": [
       {
-        "title": "LyraTip Command Center",
+        "label": "main",
+        "title": "Z-Source",
         "width": 1280,
         "height": 800,
         "resizable": true
@@ -27,11 +28,6 @@
     "targets": "all",
     "icon": [
       "icons/icon.ico"
-    ],
-    "windows": {
-      "wix": {
-        "language": "es-ES"
-      }
-    }
+    ]
   }
 }

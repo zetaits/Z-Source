@@ -1,7 +1,5 @@
 [workspace]
 members = [
   "app-desktop",
-  "scraper-bot",
-  "shared-lib",
 ]
 resolver = "2"
