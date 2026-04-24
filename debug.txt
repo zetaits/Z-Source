@@ -1,0 +1,11 @@
+[action-network] zod parse failed · issues=1 
+Array(1)
+0
+: 
+{path: 'games.12.teams.1.short_name', code: 'invalid_type', message: 'Expected string, received null'}
+length
+: 
+1
+[[Prototype]]
+: 
+Array(0)

@@ -31,11 +31,12 @@ export const restCongestion: Rule = {
     const aligned = alignmentForSide(selection.side, delta);
     if (aligned === null) return null;
 
-    const magnitude = Math.min(Math.abs(delta), REST_DIFF_CAP);
-    const strength = Math.min(
-      BASE_STRENGTH + (magnitude - REST_DIFF_MIN) * STRENGTH_PER_EXCESS_DAY,
+    const capped = Math.min(Math.abs(delta), REST_DIFF_CAP);
+    const magnitude = Math.min(
+      BASE_STRENGTH + (capped - REST_DIFF_MIN) * STRENGTH_PER_EXCESS_DAY,
       MAX_STRENGTH,
     );
+    const strength = aligned ? magnitude : -magnitude;
     const fresherSide = delta > 0 ? "home" : "away";
 
     return {

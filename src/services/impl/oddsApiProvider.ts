@@ -4,7 +4,12 @@ import type { MarketKey, Selection } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import { httpRequest, HttpError } from "@/services/http/httpClient";
 import { oddsApiQuota } from "@/services/http/quotaTracker";
-import type { OddsProvider, ProviderEvent, QuotaSnapshot } from "@/services/providers/OddsProvider";
+import type {
+  OddsProvider,
+  OddsRequestContext,
+  ProviderEvent,
+  QuotaSnapshot,
+} from "@/services/providers/OddsProvider";
 
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 
@@ -71,7 +76,8 @@ export interface OddsApiConfig {
   apiKey: string;
   region: "us" | "uk" | "eu" | "au";
   oddsFormat: "decimal";
-  sportKeyResolver: (matchId: MatchId) => string | null;
+  /** Last-resort fallback when the caller doesn't pass a sportKey via context. */
+  sportKeyResolver?: (matchId: MatchId) => string | null;
 }
 
 const toSelection = (
@@ -157,10 +163,14 @@ const buildSnapshots = (event: OddsEvent, requested: MarketKey[]): LineSnapshot[
 };
 
 export const createOddsApiProvider = (configRef: () => OddsApiConfig | null): OddsProvider => {
-  const fetchEventOdds = async (matchId: MatchId, markets: MarketKey[]): Promise<LineSnapshot[]> => {
+  const fetchEventOdds = async (
+    matchId: MatchId,
+    markets: MarketKey[],
+    context?: OddsRequestContext,
+  ): Promise<LineSnapshot[]> => {
     const config = configRef();
     if (!config?.apiKey) throw new Error("OddsAPI key not configured");
-    const sportKey = config.sportKeyResolver(matchId);
+    const sportKey = context?.sportKey ?? config.sportKeyResolver?.(matchId) ?? null;
     if (!sportKey) throw new Error(`No sport key resolved for match ${matchId}`);
 
     const apiMarkets = markets
@@ -239,11 +249,11 @@ export const createOddsApiProvider = (configRef: () => OddsApiConfig | null): Od
 
   return {
     name: "the-odds-api",
-    async getOdds(matchId, markets) {
-      return fetchEventOdds(matchId, markets);
+    async getOdds(matchId, markets, context) {
+      return fetchEventOdds(matchId, markets, context);
     },
-    async snapshotOpeners(matchId) {
-      const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"]);
+    async snapshotOpeners(matchId, context) {
+      const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"], context);
       return snaps.map((s) => ({ ...s, isOpener: true }));
     },
     async listEvents(sportKey) {

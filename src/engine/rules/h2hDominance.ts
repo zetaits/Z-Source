@@ -34,10 +34,11 @@ export const h2hDominance: Rule = {
     if (aligned === null) return null;
 
     const excess = Math.abs(delta) - DIFF_MIN;
-    const strength = Math.min(
+    const magnitude = Math.min(
       BASE_STRENGTH + excess * STRENGTH_PER_EXCESS,
       MAX_STRENGTH,
     );
+    const strength = aligned ? magnitude : -magnitude;
     const dominantSide = delta > 0 ? "home" : "away";
 
     return {

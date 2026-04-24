@@ -50,9 +50,6 @@ export function Bankroll() {
     return (
       <div className="flex h-full flex-col gap-6 p-8">
         <header>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            M3 · bankroll
-          </span>
           <h1 className="text-2xl font-semibold tracking-tight">Bankroll</h1>
         </header>
         <Alert>
@@ -74,9 +71,6 @@ export function Bankroll() {
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M3 · bankroll
-        </span>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Bankroll</h1>

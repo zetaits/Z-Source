@@ -118,6 +118,31 @@ export function MatchDetail() {
         </Alert>
       )}
 
+      {analysis.data?.status === "ok" && !analysis.data.splitsAvailable && (
+        <Alert>
+          <AlertCircle className="size-4" />
+          <AlertTitle>Splits unavailable for this fixture</AlertTitle>
+          <AlertDescription>
+            Provider <span className="font-mono">{analysis.data.splitsProvider}</span> returned no data.
+            Engine ran without <span className="font-mono">sharpVsSquare</span> signals — picks still valid,
+            but the Splits tab will be empty.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {analysis.data?.status === "ok" && !analysis.data.historyAvailable && (
+        <Alert>
+          <AlertCircle className="size-4" />
+          <AlertTitle>History unavailable for this fixture</AlertTitle>
+          <AlertDescription>
+            Provider <span className="font-mono">{analysis.data.historyProvider}</span> returned no data.
+            Engine ran without <span className="font-mono">matchup</span> signals
+            (<span className="font-mono">formDivergence</span>, <span className="font-mono">h2hDominance</span>,
+            <span className="font-mono">restCongestion</span>) — Matchup / Intangibles tabs will be empty.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="picks" className="flex flex-1 flex-col gap-4">
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="picks">Picks</TabsTrigger>
@@ -166,6 +191,7 @@ export function MatchDetail() {
         <TabsContent value="splits" className="mt-0">
           <SplitsTab
             splits={analysis.data?.splits ?? {}}
+            lines={analysis.data?.lines ?? {}}
             homeName={match.home.name}
             awayName={match.away.name}
           />

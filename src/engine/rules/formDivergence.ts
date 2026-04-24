@@ -30,10 +30,11 @@ export const formDivergence: Rule = {
     if (aligned === null) return null;
 
     const excess = Math.abs(delta) - PPG_DIFF_MIN;
-    const strength = Math.min(
+    const magnitude = Math.min(
       BASE_STRENGTH + excess * STRENGTH_PER_EXCESS_PPG,
       MAX_STRENGTH,
     );
+    const strength = aligned ? magnitude : -magnitude;
     const inFormSide = delta > 0 ? "home" : "away";
 
     return {

@@ -12,6 +12,12 @@ export interface HttpRequest {
   rotateUA?: boolean;
   acceptStatus?: number[];
   signal?: AbortSignal;
+  /**
+   * Force WebView window.fetch even under Tauri. Use for hosts that
+   * block non-browser TLS fingerprints (SofaScore, DataDome-protected
+   * sites) and expose CORS headers. Renderer supplies real Chrome JA3.
+   */
+  preferBrowserFetch?: boolean;
 }
 
 export interface HttpResponse<T = unknown> {
@@ -23,9 +29,15 @@ export interface HttpResponse<T = unknown> {
   json(): Promise<T>;
 }
 
-const doFetch = isTauri()
-  ? (input: string, init?: RequestInit) => tauriFetch(input, init as Parameters<typeof tauriFetch>[1])
-  : (input: string, init?: RequestInit) => window.fetch(input, init);
+const tauriEnv = isTauri();
+
+const pickFetch = (preferBrowser: boolean) => {
+  if (preferBrowser || !tauriEnv) {
+    return (input: string, init?: RequestInit) => window.fetch(input, init);
+  }
+  return (input: string, init?: RequestInit) =>
+    tauriFetch(input, init as Parameters<typeof tauriFetch>[1]);
+};
 
 export const httpRequest = async <T = unknown>(
   req: HttpRequest,
@@ -36,6 +48,7 @@ export const httpRequest = async <T = unknown>(
   if (req.rotateUA && !headers["User-Agent"]) {
     headers["User-Agent"] = nextUserAgent();
   }
+  const doFetch = pickFetch(req.preferBrowserFetch === true);
   const response = await doFetch(req.url, {
     method: req.method ?? "GET",
     headers,

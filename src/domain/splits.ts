@@ -13,6 +13,7 @@ export interface Splits {
   marketKey: MarketKey;
   rows: SplitData[];
   source: string;
+  bookId?: string;
   takenAt: string;
 }
 

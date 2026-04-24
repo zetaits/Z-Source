@@ -16,10 +16,22 @@ export interface ProviderEvent {
   kickoffAt: string;
 }
 
+export interface OddsRequestContext {
+  /** league-level sport key (e.g. `soccer_epl`, `soccer_italy_serie_a`). Required by the-odds-api; optional elsewhere. */
+  sportKey?: string;
+}
+
 export interface OddsProvider {
   readonly name: string;
-  getOdds(matchId: MatchId, markets: MarketKey[]): Promise<LineSnapshot[]>;
-  snapshotOpeners(matchId: MatchId): Promise<LineSnapshot[]>;
+  getOdds(
+    matchId: MatchId,
+    markets: MarketKey[],
+    context?: OddsRequestContext,
+  ): Promise<LineSnapshot[]>;
+  snapshotOpeners(
+    matchId: MatchId,
+    context?: OddsRequestContext,
+  ): Promise<LineSnapshot[]>;
   listEvents(sportKey: string): Promise<ProviderEvent[]>;
   quota(): QuotaSnapshot;
 }

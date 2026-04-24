@@ -12,8 +12,11 @@ import { strategyRepo } from "@/storage/repos/strategyRepo";
 
 export const DEFAULT_ENABLED_MARKETS: MarketKey[] = [
   "ML_1X2",
+  "DNB",
   "AH",
   "OU_GOALS",
+  "BTTS",
+  "CORNERS_TOTAL",
 ];
 
 const K_STAKE_POLICY = "strategy.stakePolicy";

@@ -15,10 +15,17 @@ interface Props {
   resolution?: ResolutionInfo;
 }
 
+const ODDS_PROVIDER_LABEL: Record<string, string> = {
+  "odds-api-io": "odds-api.io",
+  "the-odds-api": "the-odds-api.com",
+};
+
 function ResolutionBadge({ resolution }: { resolution: ResolutionInfo }) {
   const pct = Math.round(resolution.confidence * 100);
   const resolved = Boolean(resolution.oddsEventId);
   const Icon = resolved ? CheckCircle2 : HelpCircle;
+  const providerLabel =
+    ODDS_PROVIDER_LABEL[resolution.oddsProviderId] ?? resolution.oddsProviderId;
   return (
     <span
       className={cn(
@@ -29,13 +36,16 @@ function ResolutionBadge({ resolution }: { resolution: ResolutionInfo }) {
       )}
       title={
         resolved
-          ? `Mapped to OddsAPI event · confidence ${pct}%`
-          : `No confident OddsAPI match · best ${pct}%`
+          ? `Mapped to ${providerLabel} event · confidence ${pct}%`
+          : `No confident ${providerLabel} match · best ${pct}%`
       }
     >
       <Icon className="size-3" aria-hidden />
       <span>{resolved ? "resolved" : "unresolved"}</span>
       <span className="text-foreground/70">{pct}%</span>
+      <span className="border-l border-current/30 pl-1.5 text-foreground/60 normal-case">
+        {providerLabel}
+      </span>
     </span>
   );
 }
@@ -57,9 +67,6 @@ export function MatchHeader({
             Scanner
           </Link>
         </Button>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M5 · match detail
-        </span>
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-4">

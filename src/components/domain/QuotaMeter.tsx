@@ -1,28 +1,60 @@
 import { useEffect, useState } from "react";
 import { Activity, AlertTriangle } from "lucide-react";
-import { oddsApiQuota } from "@/services/http/quotaTracker";
+import type { QuotaTracker } from "@/services/http/quotaTracker";
 import type { QuotaSnapshot } from "@/services/providers/OddsProvider";
 import { cn } from "@/lib/utils";
 
-const FREE_TIER_TOTAL = 500;
+interface Props {
+  tracker: QuotaTracker;
+  compactLabel?: string;
+}
 
-const tone = (remaining: number | null): "ok" | "warn" | "danger" | "muted" => {
-  if (remaining === null) return "muted";
-  if (remaining <= FREE_TIER_TOTAL * 0.1) return "danger";
-  if (remaining <= FREE_TIER_TOTAL * 0.25) return "warn";
+const tone = (
+  remaining: number | null,
+  capacity: number | null,
+): "ok" | "warn" | "danger" | "muted" => {
+  if (remaining === null || capacity === null) return "muted";
+  const ratio = remaining / capacity;
+  if (ratio <= 0.1) return "danger";
+  if (ratio <= 0.25) return "warn";
   return "ok";
 };
 
-export function QuotaMeter() {
-  const [snapshot, setSnapshot] = useState<QuotaSnapshot>(() => oddsApiQuota.snapshot());
+const formatReset = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const diffMs = d.getTime() - Date.now();
+  if (diffMs <= 0) return "resetting…";
+  const mins = Math.round(diffMs / 60_000);
+  if (mins < 60) return `reset ${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `reset ${hrs}h`;
+  const days = Math.round(hrs / 24);
+  return `reset ${days}d`;
+};
 
-  useEffect(() => oddsApiQuota.subscribe(setSnapshot), []);
+export function QuotaMeter({ tracker, compactLabel }: Props) {
+  const [snapshot, setSnapshot] = useState<QuotaSnapshot>(() => tracker.snapshot());
+  useEffect(() => tracker.subscribe(setSnapshot), [tracker]);
 
-  const t = tone(snapshot.remaining);
+  const t = tone(snapshot.remaining, tracker.capacity);
   const Icon = t === "danger" ? AlertTriangle : Activity;
   const display = snapshot.remaining === null
     ? "—"
-    : `${snapshot.remaining} / ${FREE_TIER_TOTAL}`;
+    : `${snapshot.remaining}${tracker.capacity !== null ? ` / ${tracker.capacity}` : ""}`;
+  const resetHint = formatReset(snapshot.resetAt);
+  const label = compactLabel ?? tracker.label;
+
+  const title = [
+    `${tracker.label} quota`,
+    snapshot.lastSyncedAt
+      ? `synced ${new Date(snapshot.lastSyncedAt).toLocaleTimeString()}`
+      : "no requests yet",
+    resetHint ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -33,14 +65,12 @@ export function QuotaMeter() {
         t === "ok" && "text-muted-foreground",
         t === "muted" && "text-muted-foreground/70",
       )}
-      title={
-        snapshot.lastSyncedAt
-          ? `OddsAPI quota · last synced ${new Date(snapshot.lastSyncedAt).toLocaleTimeString()}`
-          : "OddsAPI quota — no requests yet this session"
-      }
+      title={title}
     >
       <Icon className="size-3.5" aria-hidden />
-      <span className="font-tabular">odds {display}</span>
+      <span className="font-tabular">
+        {label} {display}
+      </span>
     </div>
   );
 }

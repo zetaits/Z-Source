@@ -318,10 +318,10 @@ export const createOddsApiIoProvider = (
 
   return {
     name: "odds-api-io",
-    async getOdds(matchId, markets) {
+    async getOdds(matchId, markets, _context) {
       return fetchEventOdds(matchId, markets);
     },
-    async snapshotOpeners(matchId) {
+    async snapshotOpeners(matchId, _context) {
       const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"]);
       return snaps.map((s) => ({ ...s, isOpener: true }));
     },

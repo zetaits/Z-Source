@@ -15,6 +15,18 @@ pub fn run() {
             sql: include_str!("../../../src/storage/migrations/002_multi_provider.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "splits_cache",
+            sql: include_str!("../../../src/storage/migrations/003_splits_cache.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "history_cache",
+            sql: include_str!("../../../src/storage/migrations/004_history_cache.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

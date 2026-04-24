@@ -16,7 +16,9 @@
       "allow": [
         { "url": "https://api.sofascore.com/*" },
         { "url": "https://www.sofascore.com/*" },
-        { "url": "https://api.the-odds-api.com/*" }
+        { "url": "https://api.the-odds-api.com/*" },
+        { "url": "https://api.odds-api.io/*" },
+        { "url": "https://api.actionnetwork.com/*" }
       ]
     }
   ]

@@ -22,9 +22,6 @@ export function Strategy() {
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M7 · strategy
-        </span>
         <h1 className="text-2xl font-semibold tracking-tight">Strategy</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Calibrate the Bonded engine. Changes are saved on the spot and re-trigger any open

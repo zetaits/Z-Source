@@ -63,9 +63,6 @@ export function Scanner() {
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M2 · scanner
-        </span>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Scanner</h1>

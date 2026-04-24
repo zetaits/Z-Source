@@ -14,6 +14,7 @@ import type { SnapshotRow } from "@/storage/repos/snapshotsRepo";
 interface Props {
   snapshots: SnapshotRow[];
   title?: string;
+  bucketMs?: number;
 }
 
 const SELECTION_COLORS = [
@@ -31,14 +32,53 @@ interface Series {
   label: string;
 }
 
-const buildSeries = (snaps: SnapshotRow[]): { rows: Record<string, unknown>[]; series: Series[] } => {
+const HOUR_MS = 60 * 60 * 1000;
+
+export const pickAutoBucketMs = (snaps: SnapshotRow[]): number => {
+  if (snaps.length < 2) return 15 * 60 * 1000;
+  const first = new Date(snaps[0].takenAt).getTime();
+  const last = new Date(snaps[snaps.length - 1].takenAt).getTime();
+  const rangeH = (last - first) / HOUR_MS;
+  if (rangeH < 1) return 5 * 60 * 1000;
+  if (rangeH < 4) return 15 * 60 * 1000;
+  if (rangeH < 12) return 30 * 60 * 1000;
+  if (rangeH < 36) return HOUR_MS;
+  if (rangeH < 96) return 3 * HOUR_MS;
+  return 6 * HOUR_MS;
+};
+
+export const bucketSnaps = (
+  snaps: SnapshotRow[],
+  bucketMs: number,
+): SnapshotRow[] => {
+  if (bucketMs <= 0 || snaps.length === 0) return snaps;
+  const lastByKey = new Map<string, SnapshotRow>();
+  for (const s of snaps) {
+    const ts = new Date(s.takenAt).getTime();
+    const bucket = Math.floor(ts / bucketMs) * bucketMs;
+    const key = `${s.selectionKey}|${bucket}`;
+    const cur = lastByKey.get(key);
+    const curTs = cur ? new Date(cur.takenAt).getTime() : -Infinity;
+    if (ts > curTs) {
+      lastByKey.set(key, { ...s, takenAt: new Date(bucket).toISOString() });
+    }
+  }
+  return [...lastByKey.values()].sort(
+    (a, b) => new Date(a.takenAt).getTime() - new Date(b.takenAt).getTime(),
+  );
+};
+
+const buildSeries = (
+  snaps: SnapshotRow[],
+): { rows: Record<string, unknown>[]; series: Series[] } => {
   const byTime = new Map<string, Record<string, unknown>>();
   const selectionKeys = new Set<string>();
   for (const s of snaps) {
     selectionKeys.add(s.selectionKey);
     const key = s.takenAt;
     const row =
-      byTime.get(key) ?? ({ t: s.takenAt, ts: new Date(s.takenAt).getTime() } as Record<string, unknown>);
+      byTime.get(key) ??
+      ({ t: s.takenAt, ts: new Date(s.takenAt).getTime() } as Record<string, unknown>);
     const prev = row[s.selectionKey] as number | undefined;
     if (prev === undefined || s.priceDecimal > prev) row[s.selectionKey] = s.priceDecimal;
     byTime.set(key, row);
@@ -46,15 +86,39 @@ const buildSeries = (snaps: SnapshotRow[]): { rows: Record<string, unknown>[]; s
   const rows = [...byTime.values()].sort(
     (a, b) => (a.ts as number) - (b.ts as number),
   );
-  const series: Series[] = [...selectionKeys].map((k) => ({ key: k, label: k.split(":").slice(1).join(":") }));
+  const series: Series[] = [...selectionKeys].map((k) => ({
+    key: k,
+    label: k.split(":").slice(1).join(":"),
+  }));
   return { rows, series };
 };
 
-const formatTick = (iso: string): string =>
-  new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+const tickFormatter = (multiDay: boolean) => (iso: string) => {
+  const d = new Date(iso);
+  if (multiDay) {
+    return d.toLocaleString(undefined, {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+};
 
-export function LineMovementChart({ snapshots, title }: Props) {
-  const { rows, series } = useMemo(() => buildSeries(snapshots), [snapshots]);
+export function LineMovementChart({ snapshots, title, bucketMs }: Props) {
+  const { rows, series, multiDay } = useMemo(() => {
+    const aggregated =
+      bucketMs && bucketMs > 0 ? bucketSnaps(snapshots, bucketMs) : snapshots;
+    const built = buildSeries(aggregated);
+    let multi = false;
+    if (built.rows.length >= 2) {
+      const first = built.rows[0].ts as number;
+      const last = built.rows[built.rows.length - 1].ts as number;
+      multi = last - first > 24 * HOUR_MS;
+    }
+    return { ...built, multiDay: multi };
+  }, [snapshots, bucketMs]);
 
   if (snapshots.length === 0) {
     return (
@@ -67,7 +131,8 @@ export function LineMovementChart({ snapshots, title }: Props) {
   if (rows.length < 2) {
     return (
       <div className="flex h-64 items-center justify-center rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-        Only one snapshot so far. Line movement appears after two or more data points.
+        Only one bucket of data so far. Movement appears once at least two
+        intervals are recorded.
       </div>
     );
   }
@@ -88,7 +153,8 @@ export function LineMovementChart({ snapshots, title }: Props) {
               tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
-              tickFormatter={formatTick}
+              tickFormatter={tickFormatter(multiDay)}
+              minTickGap={40}
             />
             <YAxis
               tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}

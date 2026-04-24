@@ -1,6 +1,11 @@
-@import '@fontsource/fira-code/400.css';
-@import '@fontsource/fira-code/500.css';
-@import '@fontsource/fira-code/600.css';
+@import '@fontsource/inter-tight/400.css';
+@import '@fontsource/inter-tight/500.css';
+@import '@fontsource/inter-tight/600.css';
+@import '@fontsource/inter-tight/700.css';
+@import '@fontsource/instrument-serif/400.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
 
 @tailwind base;
 @tailwind components;
@@ -8,95 +13,114 @@
 
 @layer base {
   :root {
-    --background: 220 20% 8%;
-    --foreground: 210 40% 98%;
+    /* Z-Source terminal tokens — oklch neutrals + equal-weight semantic hues */
+    --zs-bg:           oklch(0.165 0.008 250);
+    --zs-bg-elev:      oklch(0.205 0.008 250);
+    --zs-surface:      oklch(0.235 0.009 250);
+    --zs-surface-2:    oklch(0.275 0.010 250);
+    --zs-border:       oklch(0.320 0.011 250);
+    --zs-border-bright:oklch(0.420 0.014 250);
+    --zs-fg:           oklch(0.970 0.005 250);
+    --zs-fg-dim:       oklch(0.780 0.012 250);
+    --zs-fg-muted:     oklch(0.600 0.015 250);
 
-    --card: 220 18% 12%;
-    --card-foreground: 210 40% 98%;
+    --zs-pos:   oklch(0.745 0.155 155);
+    --zs-neg:   oklch(0.675 0.190 25);
+    --zs-info:  oklch(0.745 0.130 230);
+    --zs-warn:  oklch(0.800 0.140 80);
+    --zs-sharp: oklch(0.720 0.150 300);
 
-    --popover: 220 18% 12%;
-    --popover-foreground: 210 40% 98%;
+    --zs-pos-fill:   oklch(0.745 0.155 155 / 0.14);
+    --zs-neg-fill:   oklch(0.675 0.190 25  / 0.14);
+    --zs-info-fill:  oklch(0.745 0.130 230 / 0.14);
+    --zs-warn-fill:  oklch(0.800 0.140 80  / 0.14);
+    --zs-sharp-fill: oklch(0.720 0.150 300 / 0.14);
 
-    --primary: 195 100% 50%;
-    --primary-foreground: 220 20% 8%;
+    --font-ui: 'Inter Tight', -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    --font-display: 'Instrument Serif', 'Times New Roman', serif;
 
-    --secondary: 220 15% 18%;
-    --secondary-foreground: 210 40% 98%;
+    /* shadcn bridge — HSL approximations so existing utilities still read.
+       Only used where components reference --background etc. New code should
+       prefer the --zs-* tokens via `text-fg-dim`, `bg-surface`, etc. */
+    --background: 225 18% 9%;
+    --foreground: 220 10% 96%;
 
-    --muted: 220 15% 18%;
-    --muted-foreground: 215 20% 65%;
+    --card: 225 16% 13%;
+    --card-foreground: 220 10% 96%;
 
-    --accent: 195 100% 50%;
-    --accent-foreground: 220 20% 8%;
+    --popover: 225 16% 14%;
+    --popover-foreground: 220 10% 96%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
+    --primary: 225 60% 60%;
+    --primary-foreground: 225 18% 9%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 220 20% 8%;
+    --secondary: 225 14% 18%;
+    --secondary-foreground: 220 10% 96%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --muted: 225 14% 18%;
+    --muted-foreground: 225 6% 60%;
 
-    --border: 220 15% 20%;
-    --input: 220 15% 18%;
-    --ring: 195 100% 50%;
+    --accent: 225 60% 60%;
+    --accent-foreground: 225 18% 9%;
 
-    --radius: 0.75rem;
+    --success: 155 55% 52%;
+    --success-foreground: 225 18% 9%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --warning: 80 70% 62%;
+    --warning-foreground: 225 18% 9%;
+
+    --destructive: 25 75% 58%;
+    --destructive-foreground: 220 10% 96%;
+
+    --border: 225 12% 24%;
+    --input: 225 14% 18%;
+    --ring: 225 60% 60%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 225 18% 9%;
+    --sidebar-foreground: 220 10% 96%;
+    --sidebar-primary: 225 60% 60%;
+    --sidebar-primary-foreground: 225 18% 9%;
+    --sidebar-accent: 225 14% 18%;
+    --sidebar-accent-foreground: 220 10% 96%;
+    --sidebar-border: 225 12% 24%;
+    --sidebar-ring: 225 60% 60%;
   }
 
   .dark {
-    --background: 220 20% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 220 18% 12%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 220 18% 12%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 195 100% 50%;
-    --primary-foreground: 220 20% 8%;
-
-    --secondary: 220 15% 18%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 220 15% 18%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 195 100% 50%;
-    --accent-foreground: 220 20% 8%;
-
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 220 20% 8%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 220 15% 20%;
-    --input: 220 15% 18%;
-    --ring: 195 100% 50%;
-
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 225 18% 9%;
+    --foreground: 220 10% 96%;
+    --card: 225 16% 13%;
+    --card-foreground: 220 10% 96%;
+    --popover: 225 16% 14%;
+    --popover-foreground: 220 10% 96%;
+    --primary: 225 60% 60%;
+    --primary-foreground: 225 18% 9%;
+    --secondary: 225 14% 18%;
+    --secondary-foreground: 220 10% 96%;
+    --muted: 225 14% 18%;
+    --muted-foreground: 225 6% 60%;
+    --accent: 225 60% 60%;
+    --accent-foreground: 225 18% 9%;
+    --success: 155 55% 52%;
+    --success-foreground: 225 18% 9%;
+    --warning: 80 70% 62%;
+    --warning-foreground: 225 18% 9%;
+    --destructive: 25 75% 58%;
+    --destructive-foreground: 220 10% 96%;
+    --border: 225 12% 24%;
+    --input: 225 14% 18%;
+    --ring: 225 60% 60%;
+    --sidebar-background: 225 18% 9%;
+    --sidebar-foreground: 220 10% 96%;
+    --sidebar-primary: 225 60% 60%;
+    --sidebar-primary-foreground: 225 18% 9%;
+    --sidebar-accent: 225 14% 18%;
+    --sidebar-accent-foreground: 220 10% 96%;
+    --sidebar-border: 225 12% 24%;
+    --sidebar-ring: 225 60% 60%;
   }
 }
 
@@ -112,12 +136,21 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--zs-bg);
+    color: var(--zs-fg);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.45;
   }
 
   .font-mono {
-    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -125,4 +158,64 @@
   .font-tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Z-Source semantic utilities */
+  .text-pos   { color: var(--zs-pos); }
+  .text-neg   { color: var(--zs-neg); }
+  .text-info  { color: var(--zs-info); }
+  .text-warn  { color: var(--zs-warn); }
+  .text-sharp { color: var(--zs-sharp); }
+  .text-fg       { color: var(--zs-fg); }
+  .text-fg-dim   { color: var(--zs-fg-dim); }
+  .text-fg-muted { color: var(--zs-fg-muted); }
+
+  .bg-pos-fill   { background: var(--zs-pos-fill); }
+  .bg-neg-fill   { background: var(--zs-neg-fill); }
+  .bg-info-fill  { background: var(--zs-info-fill); }
+  .bg-warn-fill  { background: var(--zs-warn-fill); }
+  .bg-sharp-fill { background: var(--zs-sharp-fill); }
+
+  .bg-zs-bg       { background: var(--zs-bg); }
+  .bg-zs-elev     { background: var(--zs-bg-elev); }
+  .bg-zs-surface  { background: var(--zs-surface); }
+  .bg-zs-surface2 { background: var(--zs-surface-2); }
+
+  .border-zs        { border-color: var(--zs-border); }
+  .border-zs-bright { border-color: var(--zs-border-bright); }
+
+  /* kicker: small uppercase mono label used everywhere */
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--zs-fg-muted);
+  }
+
+  /* shared pill styles */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 99px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid transparent;
+  }
+  .pill-pos   { background: var(--zs-pos-fill);   color: var(--zs-pos);   border-color: color-mix(in oklch, var(--zs-pos) 30%, transparent); }
+  .pill-neg   { background: var(--zs-neg-fill);   color: var(--zs-neg);   border-color: color-mix(in oklch, var(--zs-neg) 30%, transparent); }
+  .pill-info  { background: var(--zs-info-fill);  color: var(--zs-info);  border-color: color-mix(in oklch, var(--zs-info) 30%, transparent); }
+  .pill-warn  { background: var(--zs-warn-fill);  color: var(--zs-warn);  border-color: color-mix(in oklch, var(--zs-warn) 30%, transparent); }
+  .pill-sharp { background: var(--zs-sharp-fill); color: var(--zs-sharp); border-color: color-mix(in oklch, var(--zs-sharp) 30%, transparent); }
+  .pill-ghost { background: transparent; color: var(--zs-fg-dim); border-color: var(--zs-border); }
+
+  .ind { width: 7px; height: 7px; border-radius: 99px; display: inline-block; }
+  .ind-pos   { background: var(--zs-pos); }
+  .ind-neg   { background: var(--zs-neg); }
+  .ind-info  { background: var(--zs-info); }
+  .ind-warn  { background: var(--zs-warn); }
+  .ind-sharp { background: var(--zs-sharp); }
 }

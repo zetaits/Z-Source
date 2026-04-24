@@ -23,7 +23,8 @@ export const cornersHighTempo: Rule = {
 
     const wantOver = selection.side === "over";
     const aligned = (delta > 0 && wantOver) || (delta < 0 && !wantOver);
-    const strength = Math.min(Math.abs(delta) * 0.25, MAX_SHIFT);
+    const magnitude = Math.min(Math.abs(delta) * 0.25, MAX_SHIFT);
+    const strength = aligned ? magnitude : -magnitude;
 
     return {
       ruleId: "corners-high-tempo",

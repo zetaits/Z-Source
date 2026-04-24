@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowRight, CalendarClock, ListChecks, Target } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -17,60 +17,25 @@ import {
   useCurrentBalance,
 } from "@/features/bankroll/hooks/useBankroll";
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
-import { sofaScoreCatalogProvider } from "@/services/impl/sofaScoreCatalogProvider";
-import { settingsStore } from "@/services/settings/settingsStore";
-import { LeagueId } from "@/domain/ids";
+import {
+  WINDOW_FIXTURES_TTL_MS,
+  fetchWindowFixtures,
+  windowFixturesQueryKey,
+} from "@/services/catalog/windowFixtures";
 import { isPersistentStorage } from "@/storage";
-import { matchesCacheRepo } from "@/storage/repos/matchesCacheRepo";
 import { formatMoney, formatSignedMoney } from "@/lib/money";
 
-const CACHE_TTL_MS = 5 * 60_000;
-
-const buildRange = (dayOffset: number) => {
-  const from = new Date();
-  from.setHours(0, 0, 0, 0);
-  from.setDate(from.getDate() + dayOffset);
-  const to = new Date(from);
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
-};
-
-const fetchFixturesForOffset = async (offset: number): Promise<CatalogMatch[]> => {
-  const settings = await settingsStore.load();
-  const leagueIds = settings.enabledLeagueIds.map((id) => LeagueId(id));
-  if (leagueIds.length === 0) return [];
-  const { from, to } = buildRange(offset);
-
-  if (isPersistentStorage()) {
-    const cached = await matchesCacheRepo.listInRange({
-      leagueIds,
-      from,
-      to,
-      maxAgeMs: CACHE_TTL_MS,
-    });
-    if (cached) return cached;
-  }
-
-  const fresh = await sofaScoreCatalogProvider.listFixtures({ leagueIds, from, to });
-  if (isPersistentStorage() && fresh.length > 0) {
-    void matchesCacheRepo.upsert(fresh).catch(() => {});
-  }
-  return fresh;
-};
-
-const useMultiDayFixtures = () =>
-  useQueries({
-    queries: [0, 1, 2, 3].map((offset) => ({
-      queryKey: ["scanner", "fixtures", "rollup", offset] as const,
-      queryFn: () => fetchFixturesForOffset(offset),
-      staleTime: CACHE_TTL_MS,
-      gcTime: 30 * 60_000,
-    })),
+const useWindowFixtures = () =>
+  useQuery({
+    queryKey: windowFixturesQueryKey,
+    queryFn: fetchWindowFixtures,
+    staleTime: WINDOW_FIXTURES_TTL_MS,
+    gcTime: 30 * 60_000,
   });
 
 export function CommandCenter() {
   const persistent = isPersistentStorage();
-  const fixtures = useMultiDayFixtures();
+  const fixtures = useWindowFixtures();
   const settingsQ = useBankrollSettings();
   const balanceQ = useCurrentBalance();
   const exposureQ = useOpenExposure();
@@ -78,20 +43,17 @@ export function CommandCenter() {
   const recentBetsQ = useBets({ limit: 100 });
 
   const upcoming = useMemo<CatalogMatch[]>(() => {
-    const all: CatalogMatch[] = [];
+    const data = fixtures.data ?? [];
     const now = Date.now();
-    for (const q of fixtures) {
-      if (q.data) all.push(...q.data);
-    }
-    return all
+    return data
       .filter((m) => new Date(m.kickoffAt).getTime() >= now - 3 * 3_600_000)
       .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
       .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))
       .slice(0, 10);
-  }, [fixtures]);
+  }, [fixtures.data]);
 
-  const isLoadingFixtures = fixtures.some((q) => q.isLoading);
-  const fixtureError = fixtures.find((q) => q.isError)?.error as Error | undefined;
+  const isLoadingFixtures = fixtures.isLoading;
+  const fixtureError = fixtures.error as Error | undefined;
 
   const clvSummary = useMemo(() => {
     const bets = recentBetsQ.data ?? [];
@@ -118,9 +80,6 @@ export function CommandCenter() {
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M8 · command center
-        </span>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Command Center</h1>

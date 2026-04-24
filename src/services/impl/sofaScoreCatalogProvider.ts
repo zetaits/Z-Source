@@ -22,7 +22,7 @@ const fetchActiveSeason = async (tournamentId: number): Promise<number | null> =
     const res = await httpRequest({
       url: tournamentSeasonsUrl(tournamentId),
       rps: 1,
-      rotateUA: true,
+      preferBrowserFetch: true,
       headers: { Accept: "application/json" },
     });
     const json = await res.json();
@@ -50,7 +50,7 @@ const fetchEventsPage = async (
     const res = await httpRequest({
       url: tournamentEventsUrl(tournamentId, seasonId, span, page),
       rps: 1,
-      rotateUA: true,
+      preferBrowserFetch: true,
       headers: { Accept: "application/json" },
       acceptStatus: [404],
     });
@@ -75,8 +75,16 @@ const toCatalogMatch = (event: SofaEvent, league: LeagueDef): CatalogMatch => ({
   leagueName: league.name,
   countryCode: league.countryCode,
   kickoffAt: new Date(event.startTimestamp * 1000).toISOString(),
-  home: { name: event.homeTeam.name, aliases: aliasesFor(event.homeTeam) },
-  away: { name: event.awayTeam.name, aliases: aliasesFor(event.awayTeam) },
+  home: {
+    name: event.homeTeam.name,
+    aliases: aliasesFor(event.homeTeam),
+    sofaScoreId: event.homeTeam.id,
+  },
+  away: {
+    name: event.awayTeam.name,
+    aliases: aliasesFor(event.awayTeam),
+    sofaScoreId: event.awayTeam.id,
+  },
   status: mapSofaStatus(event.status.code, event.status.type),
 });
 

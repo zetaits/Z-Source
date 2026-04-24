@@ -8,8 +8,15 @@ export interface SplitProviderCapabilities {
   hasMoneyPct: boolean;
 }
 
+export interface SplitMatchContext {
+  homeName: string;
+  awayName: string;
+  kickoffAt: string;
+}
+
 export interface SplitProviderQuery {
   linesByMarket?: Partial<Record<MarketKey, number[]>>;
+  matchContext?: SplitMatchContext;
 }
 
 export interface SplitProvider {

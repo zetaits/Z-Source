@@ -10,12 +10,10 @@ import type { StrategyConfig } from "@/domain/strategy";
 import { findLeagueById } from "@/config/leagues";
 import { DEFAULT_UNIT_BANKROLL_FRACTION, type AnalysisContext } from "@/engine/context";
 import { runBondedAnalysis } from "@/engine";
-import { createMockHistoryProvider } from "@/services/impl/mockHistoryProvider";
-import { createMockSplitProvider } from "@/services/impl/mockSplitProvider";
-import { createOddsApiProvider } from "@/services/impl/oddsApiProvider";
 import type { OddsProvider } from "@/services/providers/OddsProvider";
+import { resolveProviders } from "@/services/providers/factory";
 import { createMatchResolver } from "@/services/resolver/MatchResolver";
-import { settingsStore } from "@/services/settings/settingsStore";
+import { settingsStore, type OddsProviderId } from "@/services/settings/settingsStore";
 import { isPersistentStorage } from "@/storage";
 import { matchResolutionRepo } from "@/storage/repos/matchResolutionRepo";
 import { snapshotsRepo, type SnapshotRow } from "@/storage/repos/snapshotsRepo";
@@ -24,6 +22,7 @@ import { loadStrategy, strategyFingerprint } from "./loadStrategy";
 export type AnalysisStatus = "ok" | "no-api-key" | "unresolved" | "empty-odds" | "error";
 
 export interface ResolutionInfo {
+  oddsProviderId: OddsProviderId;
   oddsEventId: string | null;
   confidence: number;
   resolvedAt: string;
@@ -34,10 +33,14 @@ export interface AnalysisResult {
   lines: Partial<Record<MarketKey, LineSnapshot>>;
   openers: Partial<Record<MarketKey, LineSnapshot>>;
   splits: Partial<Record<MarketKey, Splits>>;
+  splitsAvailable: boolean;
+  splitsProvider: string;
   homeForm?: TeamForm;
   awayForm?: TeamForm;
   h2h?: H2H;
   intangibles?: Intangibles;
+  historyAvailable: boolean;
+  historyProvider: string;
   strategy: StrategyConfig;
   status: AnalysisStatus;
   message?: string;
@@ -152,16 +155,24 @@ const loadOpeners = async (
   return out;
 };
 
-const resolveOddsEventId = async (
+interface ResolutionAttempt {
+  providerId: OddsProviderId;
+  provider: OddsProvider;
+  info: ResolutionInfo;
+}
+
+const resolveWithProvider = async (
   match: CatalogMatch,
-  oddsProvider: OddsProvider,
+  providerId: OddsProviderId,
+  provider: OddsProvider,
   sportKey: string,
 ): Promise<ResolutionInfo> => {
   const existing = isPersistentStorage()
-    ? await matchResolutionRepo.get(match.source, match.catalogId)
+    ? await matchResolutionRepo.get(match.source, match.catalogId, providerId)
     : null;
   if (existing?.oddsEventId) {
     return {
+      oddsProviderId: providerId,
       oddsEventId: existing.oddsEventId,
       confidence: existing.confidence,
       resolvedAt: existing.resolvedAt,
@@ -170,7 +181,7 @@ const resolveOddsEventId = async (
 
   const resolver = createMatchResolver({
     listEvents: async () => {
-      const evs = await oddsProvider.listEvents(sportKey);
+      const evs = await provider.listEvents(sportKey);
       return evs.map((e) => ({
         eventId: e.eventId,
         homeName: e.homeName,
@@ -186,12 +197,21 @@ const resolveOddsEventId = async (
     await matchResolutionRepo.upsert({
       catalogSource: match.source,
       catalogId: match.catalogId,
+      oddsProviderId: providerId,
       oddsEventId,
       confidence: result.confidence,
     });
   }
-  return { oddsEventId, confidence: result.confidence, resolvedAt };
+  return { oddsProviderId: providerId, oddsEventId, confidence: result.confidence, resolvedAt };
 };
+
+const LEG_TIMEOUT_MS = 20_000;
+
+const withTimeout = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
 
 const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
   const strategy = await loadStrategy();
@@ -201,6 +221,10 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     lines: {},
     openers: {},
     splits: {},
+    splitsAvailable: false,
+    splitsProvider: "",
+    historyAvailable: false,
+    historyProvider: "",
     strategy,
     status,
     message,
@@ -211,34 +235,43 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
   if (!league) return emptyResult("error", `Unknown league ${match.leagueId}`);
 
   const settings = await settingsStore.load();
-  if (!settings.oddsApiKey) return emptyResult("no-api-key");
+  const { oddsComponents, splits: splitProvider, history: historyProvider } =
+    resolveProviders(settings);
+  const configured = oddsComponents.filter((c) => c.configured);
+  if (configured.length === 0) return emptyResult("no-api-key");
 
-  const oddsProvider = createOddsApiProvider(() => ({
-    apiKey: settings.oddsApiKey!,
-    region: settings.oddsRegion,
-    oddsFormat: "decimal",
-    sportKeyResolver: () => league.oddsApiKey,
-  }));
-  const splitProvider = createMockSplitProvider();
-  const historyProvider = createMockHistoryProvider();
+  let chosen: ResolutionAttempt | null = null;
+  let bestPartial: ResolutionInfo | null = null;
+  let lastError: Error | null = null;
+  for (const comp of configured) {
+    try {
+      const info = await resolveWithProvider(match, comp.id, comp.provider, league.oddsApiKey);
+      if (info.oddsEventId) {
+        chosen = { providerId: comp.id, provider: comp.provider, info };
+        break;
+      }
+      if (!bestPartial || info.confidence > bestPartial.confidence) bestPartial = info;
+    } catch (err) {
+      lastError = err as Error;
+    }
+  }
 
-  let resolution: ResolutionInfo;
-  try {
-    resolution = await resolveOddsEventId(match, oddsProvider, league.oddsApiKey);
-  } catch (err) {
-    return emptyResult("error", (err as Error).message);
+  if (!chosen) {
+    if (bestPartial) {
+      const pct = Math.round(bestPartial.confidence * 100);
+      return {
+        ...emptyResult(
+          "unresolved",
+          `No odds-provider event matched this fixture (best confidence ${pct}%).`,
+        ),
+        resolution: bestPartial,
+      };
+    }
+    return emptyResult("error", lastError?.message ?? "All odds providers failed to resolve");
   }
-  if (!resolution.oddsEventId) {
-    const pct = Math.round(resolution.confidence * 100);
-    return {
-      ...emptyResult(
-        "unresolved",
-        `No OddsAPI event matched this fixture (best confidence ${pct}%).`,
-      ),
-      resolution,
-    };
-  }
-  const matchId = MatchId(resolution.oddsEventId);
+
+  const { provider: oddsProvider, info: resolution } = chosen;
+  const matchId = MatchId(resolution.oddsEventId!);
   const engineMatch = toMatch(match, matchId);
 
   const requestedMarkets = strategy.enabledMarkets.length > 0
@@ -247,13 +280,15 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
 
   let snapshots: LineSnapshot[];
   try {
-    snapshots = await oddsProvider.getOdds(matchId, requestedMarkets);
+    snapshots = await oddsProvider.getOdds(matchId, requestedMarkets, {
+      sportKey: league.oddsApiKey,
+    });
   } catch (err) {
     return { ...emptyResult("error", (err as Error).message), resolution };
   }
 
   if (snapshots.length === 0) {
-    return { ...emptyResult("empty-odds", "OddsAPI returned no odds for this fixture."), resolution };
+    return { ...emptyResult("empty-odds", "Provider returned no odds for this fixture."), resolution };
   }
 
   await persistOpeners(matchId, snapshots).catch(() => {});
@@ -270,14 +305,78 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
 
   const [openers, splitsList, homeForm, awayForm, h2h, intangibles] = await Promise.all([
     loadOpeners(matchId).catch(() => ({})),
-    splitProvider.getSplits(matchId, requestedMarkets, { linesByMarket }).catch(() => null),
-    historyProvider.getForm(engineMatch.home.id, FORM_LAST_N).catch(() => undefined),
-    historyProvider.getForm(engineMatch.away.id, FORM_LAST_N).catch(() => undefined),
-    historyProvider.getH2H(engineMatch.home.id, engineMatch.away.id).catch(() => undefined),
-    historyProvider.getIntangibles(matchId).catch(() => undefined),
+    withTimeout(
+      splitProvider
+        .getSplits(matchId, requestedMarkets, {
+          linesByMarket,
+          matchContext: {
+            homeName: engineMatch.home.name,
+            awayName: engineMatch.away.name,
+            kickoffAt: engineMatch.kickoffAt,
+          },
+        })
+        .catch(() => null),
+      LEG_TIMEOUT_MS,
+      null,
+    ),
+    withTimeout(
+      historyProvider
+        .getForm(engineMatch.home.id, FORM_LAST_N, {
+          sofaScoreTeamId: match.home.sofaScoreId,
+          teamName: match.home.name,
+        })
+        .catch(() => undefined),
+      LEG_TIMEOUT_MS,
+      undefined,
+    ),
+    withTimeout(
+      historyProvider
+        .getForm(engineMatch.away.id, FORM_LAST_N, {
+          sofaScoreTeamId: match.away.sofaScoreId,
+          teamName: match.away.name,
+        })
+        .catch(() => undefined),
+      LEG_TIMEOUT_MS,
+      undefined,
+    ),
+    withTimeout(
+      historyProvider
+        .getH2H(engineMatch.home.id, engineMatch.away.id, {
+          homeSofaScoreId: match.home.sofaScoreId,
+          awaySofaScoreId: match.away.sofaScoreId,
+          sofaEventId:
+            match.source === "sofascore" ? Number(match.catalogId) : undefined,
+          kickoffAt: match.kickoffAt,
+        })
+        .catch(() => undefined),
+      LEG_TIMEOUT_MS,
+      undefined,
+    ),
+    withTimeout(
+      historyProvider
+        .getIntangibles(matchId, {
+          homeSofaScoreId: match.home.sofaScoreId,
+          awaySofaScoreId: match.away.sofaScoreId,
+          sofaEventId:
+            match.source === "sofascore" ? Number(match.catalogId) : undefined,
+          kickoffAt: match.kickoffAt,
+        })
+        .catch(() => undefined),
+      LEG_TIMEOUT_MS,
+      undefined,
+    ),
   ]);
 
   const splits = splitsList ? indexSplits(splitsList) : {};
+  const splitsAvailable = Boolean(splitsList && splitsList.length > 0);
+  const splitsProvider = splitProvider.name;
+  const historyAvailable =
+    (homeForm?.games.length ?? 0) > 0 ||
+    (awayForm?.games.length ?? 0) > 0 ||
+    (h2h?.meetings.length ?? 0) > 0 ||
+    intangibles?.homeRestDays !== undefined ||
+    intangibles?.awayRestDays !== undefined;
+  const historyProviderName = historyProvider.name;
   const lines = indexByMarket(snapshots);
 
   const ctx: AnalysisContext = {
@@ -300,10 +399,14 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     lines,
     openers,
     splits,
+    splitsAvailable,
+    splitsProvider,
     homeForm,
     awayForm,
     h2h,
     intangibles,
+    historyAvailable,
+    historyProvider: historyProviderName,
     strategy,
     status: "ok",
     resolution,

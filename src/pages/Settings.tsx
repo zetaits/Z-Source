@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { CacheResetCard } from "@/features/settings/components/CacheResetCard";
 import { DataCard } from "@/features/settings/components/DataCard";
 import { LeaguesPicker } from "@/features/settings/components/LeaguesPicker";
 import { OddsApiKeyCard } from "@/features/settings/components/OddsApiKeyCard";
@@ -11,9 +12,6 @@ export function Settings() {
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          M2 · settings
-        </span>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Configure providers and the leagues you want to scan. OddsAPI consumption only kicks in when you open a match.
@@ -32,6 +30,7 @@ export function Settings() {
           <ProvidersCard settings={data} onUpdate={update} />
           <LeaguesPicker settings={data} onUpdate={update} />
           <DataCard />
+          <CacheResetCard />
         </div>
       )}
     </div>
