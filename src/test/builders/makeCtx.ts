@@ -4,6 +4,7 @@ import type { MarketKey, Selection } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import type { Splits } from "@/domain/splits";
 import {
+  DEFAULT_LEG_CAPS,
   DEFAULT_LEG_WEIGHTS,
   DEFAULT_STAKE_POLICY,
   type StrategyConfig,
@@ -40,6 +41,8 @@ export const makeLineSnapshot = (
 
 export const defaultStrategy = (overrides: Partial<StrategyConfig> = {}): StrategyConfig => ({
   legWeights: DEFAULT_LEG_WEIGHTS,
+  legCaps: DEFAULT_LEG_CAPS,
+  minLegsAlignedForBonded: 3,
   stakePolicy: DEFAULT_STAKE_POLICY,
   rules: [],
   enabledMarkets: DEFAULT_MARKETS,
@@ -52,6 +55,7 @@ export interface CtxOverrides {
   splits?: Partial<Record<MarketKey, Splits>>;
   strategy?: StrategyConfig;
   unitBankrollFraction?: number;
+  userBooks?: string[];
   homeForm?: TeamForm;
   awayForm?: TeamForm;
   h2h?: H2H;
@@ -77,6 +81,7 @@ export const makeCtx = (overrides: CtxOverrides = {}): AnalysisContext => ({
   h2h: overrides.h2h,
   intangibles: overrides.intangibles,
   unitBankrollFraction: overrides.unitBankrollFraction ?? DEFAULT_UNIT_BANKROLL_FRACTION,
+  userBooks: overrides.userBooks ?? [],
   generatedAt: nowIso(),
 });
 

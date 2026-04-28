@@ -25,6 +25,7 @@ const settingsSchema = z.object({
   oddsProviderOrder: z.array(oddsProviderIdSchema).min(1),
   splitProviderId: z.enum(SPLIT_PROVIDER_IDS),
   historyProviderId: z.enum(HISTORY_PROVIDER_IDS),
+  userBooks: z.array(z.string()),
 });
 
 export type AppSettings = z.infer<typeof settingsSchema>;
@@ -40,6 +41,7 @@ const defaults = (): AppSettings => ({
   oddsProviderOrder: [...DEFAULT_ODDS_ORDER],
   splitProviderId: "action-network",
   historyProviderId: "sofascore",
+  userBooks: [],
 });
 
 const migrate = (raw: unknown): AppSettings => {

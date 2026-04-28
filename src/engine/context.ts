@@ -16,6 +16,7 @@ export interface AnalysisContext {
   h2h?: H2H;
   intangibles?: Intangibles;
   unitBankrollFraction: number;
+  userBooks: string[];
   generatedAt: string;
 }
 

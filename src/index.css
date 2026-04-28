@@ -2,7 +2,6 @@
 @import '@fontsource/inter-tight/500.css';
 @import '@fontsource/inter-tight/600.css';
 @import '@fontsource/inter-tight/700.css';
-@import '@fontsource/instrument-serif/400.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/600.css';
@@ -38,7 +37,7 @@
 
     --font-ui: 'Inter Tight', -apple-system, 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-    --font-display: 'Instrument Serif', 'Times New Roman', serif;
+    --font-display: 'Inter Tight', -apple-system, 'Segoe UI', sans-serif;
 
     /* shadcn bridge — HSL approximations so existing utilities still read.
        Only used where components reference --background etc. New code should
@@ -149,8 +148,8 @@
 
   .font-display {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 }
 

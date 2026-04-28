@@ -1,6 +1,7 @@
 import type { MarketKey } from "./market";
 
 export type Leg = "matchup" | "trends" | "lines" | "sharpVsSquare" | "intangibles" | "math";
+export type AdjustingLeg = Exclude<Leg, "math">;
 
 export interface LegWeights {
   matchup: number;
@@ -10,12 +11,22 @@ export interface LegWeights {
   intangibles: number;
 }
 
+export type LegCaps = Record<AdjustingLeg, number>;
+
 export const DEFAULT_LEG_WEIGHTS: LegWeights = {
   matchup: 0.20,
   trends: 0.15,
   lines: 0.25,
   sharpVsSquare: 0.25,
   intangibles: 0.15,
+};
+
+export const DEFAULT_LEG_CAPS: LegCaps = {
+  matchup: 0.04,
+  trends: 0.03,
+  lines: 0.05,
+  sharpVsSquare: 0.05,
+  intangibles: 0.03,
 };
 
 export type StakeKind = "FLAT" | "FRACTIONAL_KELLY";
@@ -47,6 +58,8 @@ export interface RuleConfig {
 
 export interface StrategyConfig {
   legWeights: LegWeights;
+  legCaps: LegCaps;
+  minLegsAlignedForBonded: number;
   stakePolicy: StakePolicy;
   rules: RuleConfig[];
   enabledMarkets: MarketKey[];

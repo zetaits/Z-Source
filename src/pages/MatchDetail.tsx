@@ -9,7 +9,6 @@ import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
 import { useBankrollSettings } from "@/features/bankroll/hooks/useBankroll";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MatchHeader } from "@/features/match-detail/components/MatchHeader";
 import { PicksTab } from "@/features/match-detail/components/PicksTab";
 import { LinesTab } from "@/features/match-detail/components/LinesTab";
@@ -18,8 +17,13 @@ import { TrendsTab } from "@/features/match-detail/components/TrendsTab";
 import { SplitsTab } from "@/features/match-detail/components/SplitsTab";
 import { SentimentTab } from "@/features/match-detail/components/SentimentTab";
 import { IntangiblesTab } from "@/features/match-detail/components/IntangiblesTab";
+import { ReasoningTrace } from "@/components/domain/ReasoningTrace";
 import { useMatch } from "@/features/match-detail/hooks/useMatch";
 import { useAnalysis } from "@/features/match-detail/hooks/useAnalysis";
+import { cn } from "@/lib/utils";
+
+const TABS = ["picks", "lines", "matchup", "trends", "splits", "sentiment", "intangibles"] as const;
+type Tab = typeof TABS[number];
 
 const toPrefill = (play: PlayCandidate, leagueId: string): BetEntryPrefill => ({
   matchId: String(play.matchId),
@@ -40,6 +44,7 @@ export function MatchDetail() {
 
   const [analysisEnabled, setAnalysisEnabled] = useState(false);
   const analysis = useAnalysis(match ?? null, { enabled: analysisEnabled });
+  const [activeTab, setActiveTab] = useState<Tab>("picks");
 
   const lastToastedErrorRef = useRef<string | null>(null);
   useEffect(() => {
@@ -84,7 +89,11 @@ export function MatchDetail() {
           <AlertTitle>Fixture not found in cache</AlertTitle>
           <AlertDescription>
             Match <span className="font-mono">{id}</span> isn't cached locally.
-            Open it from the <Link className="text-primary hover:underline" to="/scanner">Scanner</Link> after selecting a league, or the storage cache may have expired.
+            Open it from the{" "}
+            <Link className="text-info hover:underline" to="/scanner">
+              Scanner
+            </Link>{" "}
+            after selecting a league, or the storage cache may have expired.
           </AlertDescription>
         </Alert>
       </div>
@@ -96,7 +105,8 @@ export function MatchDetail() {
   const lineMatchId = oddsEventId ? MatchId(String(oddsEventId)) : null;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-8">
+    <div className="flex h-full flex-col" style={{ background: "var(--zs-bg)" }}>
+      {/* Redesigned sticky header */}
       <MatchHeader
         match={match}
         onRunAnalysis={() => {
@@ -106,69 +116,84 @@ export function MatchDetail() {
         isAnalyzing={analysis.isFetching}
         analysisLabel={analysisLabel}
         resolution={analysis.data?.resolution}
+        analysis={analysis.data ?? undefined}
       />
 
-      {analysis.isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" />
-          <AlertTitle>Analysis failed</AlertTitle>
-          <AlertDescription>
-            {(analysis.error as Error)?.message ?? "Unknown error"}
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Alerts */}
+      <div className="flex flex-col gap-2 px-7 pt-4 empty:hidden">
+        {analysis.isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertTitle>Analysis failed</AlertTitle>
+            <AlertDescription>
+              {(analysis.error as Error)?.message ?? "Unknown error"}
+            </AlertDescription>
+          </Alert>
+        )}
+        {analysis.data?.status === "ok" && !analysis.data.splitsAvailable && (
+          <Alert>
+            <AlertCircle className="size-4" />
+            <AlertTitle>Splits unavailable</AlertTitle>
+            <AlertDescription>
+              Provider <span className="font-mono">{analysis.data.splitsProvider}</span>{" "}
+              returned no data — picks still valid, Splits tab will be empty.
+            </AlertDescription>
+          </Alert>
+        )}
+        {analysis.data?.status === "ok" && !analysis.data.historyAvailable && (
+          <Alert>
+            <AlertCircle className="size-4" />
+            <AlertTitle>History unavailable</AlertTitle>
+            <AlertDescription>
+              Provider <span className="font-mono">{analysis.data.historyProvider}</span>{" "}
+              returned no data — Matchup / Intangibles tabs will be empty.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
 
-      {analysis.data?.status === "ok" && !analysis.data.splitsAvailable && (
-        <Alert>
-          <AlertCircle className="size-4" />
-          <AlertTitle>Splits unavailable for this fixture</AlertTitle>
-          <AlertDescription>
-            Provider <span className="font-mono">{analysis.data.splitsProvider}</span> returned no data.
-            Engine ran without <span className="font-mono">sharpVsSquare</span> signals — picks still valid,
-            but the Splits tab will be empty.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Tab strip */}
+      <div
+        className="flex gap-0 border-b border-zs px-7"
+        style={{ background: "var(--zs-bg)" }}
+        role="tablist"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={t === activeTab}
+            onClick={() => setActiveTab(t)}
+            className={cn(
+              "border-b-2 px-3.5 py-3 font-mono text-[12px] font-medium capitalize tracking-[0.01em] transition-colors focus:outline-none",
+              t === activeTab
+                ? "border-info text-fg"
+                : "border-transparent text-fg-muted hover:text-fg-dim",
+            )}
+            style={
+              t === activeTab
+                ? { borderBottomColor: "var(--zs-info)" }
+                : {}
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
-      {analysis.data?.status === "ok" && !analysis.data.historyAvailable && (
-        <Alert>
-          <AlertCircle className="size-4" />
-          <AlertTitle>History unavailable for this fixture</AlertTitle>
-          <AlertDescription>
-            Provider <span className="font-mono">{analysis.data.historyProvider}</span> returned no data.
-            Engine ran without <span className="font-mono">matchup</span> signals
-            (<span className="font-mono">formDivergence</span>, <span className="font-mono">h2hDominance</span>,
-            <span className="font-mono">restCongestion</span>) — Matchup / Intangibles tabs will be empty.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs defaultValue="picks" className="flex flex-1 flex-col gap-4">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="picks">Picks</TabsTrigger>
-          <TabsTrigger value="lines">Lines</TabsTrigger>
-          <TabsTrigger value="matchup">Matchup</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="splits">Splits</TabsTrigger>
-          <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
-          <TabsTrigger value="intangibles">Intangibles</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="picks" className="mt-0">
-          <PicksTab
+      {/* Tab body */}
+      <div className="flex-1 overflow-auto px-7 py-5">
+        {activeTab === "picks" && (
+          <PicksPaneOrEmpty
             plays={plays}
             onLogBet={openLogBet}
             ran={Boolean(analysis.data)}
             status={analysis.data?.status ?? "idle"}
             message={analysis.data?.message}
           />
-        </TabsContent>
-
-        <TabsContent value="lines" className="mt-0">
-          <LinesTab matchId={lineMatchId} />
-        </TabsContent>
-
-        <TabsContent value="matchup" className="mt-0">
+        )}
+        {activeTab === "lines" && <LinesTab matchId={lineMatchId} />}
+        {activeTab === "matchup" && (
           <MatchupTab
             homeName={match.home.name}
             awayName={match.away.name}
@@ -176,9 +201,8 @@ export function MatchDetail() {
             awayForm={analysis.data?.awayForm}
             h2h={analysis.data?.h2h}
           />
-        </TabsContent>
-
-        <TabsContent value="trends" className="mt-0">
+        )}
+        {activeTab === "trends" && (
           <TrendsTab
             homeName={match.home.name}
             awayName={match.away.name}
@@ -186,33 +210,30 @@ export function MatchDetail() {
             awayForm={analysis.data?.awayForm}
             h2h={analysis.data?.h2h}
           />
-        </TabsContent>
-
-        <TabsContent value="splits" className="mt-0">
+        )}
+        {activeTab === "splits" && (
           <SplitsTab
             splits={analysis.data?.splits ?? {}}
             lines={analysis.data?.lines ?? {}}
             homeName={match.home.name}
             awayName={match.away.name}
           />
-        </TabsContent>
-
-        <TabsContent value="sentiment" className="mt-0">
+        )}
+        {activeTab === "sentiment" && (
           <SentimentTab
             splits={analysis.data?.splits ?? {}}
             homeName={match.home.name}
             awayName={match.away.name}
           />
-        </TabsContent>
-
-        <TabsContent value="intangibles" className="mt-0">
+        )}
+        {activeTab === "intangibles" && (
           <IntangiblesTab
             homeName={match.home.name}
             awayName={match.away.name}
             intangibles={analysis.data?.intangibles}
           />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {prefill && bankroll && (
         <BetEntryDialog
@@ -222,6 +243,87 @@ export function MatchDetail() {
           bankroll={bankroll}
         />
       )}
+    </div>
+  );
+}
+
+/* Picks tab with 2-pane layout when plays exist */
+function PicksPaneOrEmpty({
+  plays,
+  onLogBet,
+  ran,
+  status,
+  message,
+}: {
+  plays: PlayCandidate[];
+  onLogBet: (play: PlayCandidate) => void;
+  ran: boolean;
+  status: string;
+  message?: string;
+}) {
+  const [selected, setSelected] = useState(0);
+  const topPlay = plays[selected] ?? plays[0];
+
+  if (!ran || plays.length === 0) {
+    return (
+      <PicksTab
+        plays={plays}
+        onLogBet={onLogBet}
+        ran={ran}
+        status={status}
+        message={message}
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+      {/* Left: plays */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-fg">
+            Picks · {plays.length} {plays.length === 1 ? "candidate" : "candidates"}
+          </span>
+          <span className="kicker">sorted by edge</span>
+        </div>
+        {plays.map((p, i) => (
+          <div
+            key={p.id}
+            onClick={() => setSelected(i)}
+            className={cn(
+              "cursor-pointer rounded-lg ring-1 ring-transparent transition-all",
+              i === selected && "ring-info",
+            )}
+            style={i === selected ? { "--tw-ring-color": "var(--zs-info)" } as React.CSSProperties : {}}
+          >
+            <PicksTab
+              plays={[p]}
+              onLogBet={onLogBet}
+              ran={true}
+              status="ok"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Right: reasoning + line note */}
+      <div className="flex flex-col gap-4">
+        {topPlay && (
+          <div
+            className="rounded-lg border border-zs p-4"
+            style={{ background: "var(--zs-bg-elev)" }}
+          >
+            <div className="kicker mb-3">
+              Reasoning ·{" "}
+              {topPlay.selection.side} {topPlay.selection.marketKey}
+            </div>
+            <ReasoningTrace
+              entries={topPlay.trace}
+              defaultOpen={true}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

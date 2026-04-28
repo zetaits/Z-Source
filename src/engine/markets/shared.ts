@@ -7,7 +7,12 @@ import type { AnalysisContext } from "../context";
 export const offersForMarket = (
   ctx: AnalysisContext,
   market: MarketKey,
-): BookOffer[] => ctx.lines[market]?.offers ?? [];
+): BookOffer[] => {
+  const all = ctx.lines[market]?.offers ?? [];
+  if (ctx.userBooks.length === 0) return all;
+  const filtered = all.filter((o) => ctx.userBooks.includes(o.book));
+  return filtered.length > 0 ? filtered : all;
+};
 
 export const bestOfferForSelection = (
   ctx: AnalysisContext,

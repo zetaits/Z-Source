@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Globe2, Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -52,6 +54,9 @@ const ODDS_PRIMARY_HELP =
   "Tried first on every analysis. If it errors or returns no event for the fixture, the fallback is tried next.";
 const ODDS_FALLBACK_HELP =
   "Used only if the primary fails. Quotas: odds-api.io = 100 req/hour, the-odds-api.com = 500 req/month (both free-tier).";
+const USER_BOOKS_HELP =
+  "Comma-separated book IDs you actually have an account on (e.g. pinnacle,bet365,unibet). " +
+  "Edge is computed using only those books. Leave empty to use best price across all books.";
 const SPLITS_HELP =
   "Action Network's public JSON API (money-line tickets/money %). Cached 10 min per match.";
 const HISTORY_HELP =
@@ -101,6 +106,15 @@ function FieldLabel({ text, help }: { text: string; help: string }) {
 export function ProvidersCard({ settings, onUpdate }: Props) {
   const [primary, fallback] = settings.oddsProviderOrder;
   const fallbackOptions = ODDS_PROVIDER_IDS.filter((id) => id !== primary);
+  const [booksInput, setBooksInput] = useState((settings.userBooks ?? []).join(", "));
+
+  const handleBooksBlur = () => {
+    const books = booksInput
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    void onUpdate({ userBooks: books });
+  };
 
   const updateOrder = (slot: "primary" | "fallback", value: OddsProviderId) =>
     void onUpdate({ oddsProviderOrder: applyOrder(settings.oddsProviderOrder, slot, value) });
@@ -229,6 +243,22 @@ export function ProvidersCard({ settings, onUpdate }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="col-span-full grid gap-2">
+            <FieldLabel text="Books you operate" help={USER_BOOKS_HELP} />
+            <Input
+              placeholder="pinnacle, bet365, unibet  (empty = all books)"
+              value={booksInput}
+              onChange={(e) => setBooksInput(e.target.value)}
+              onBlur={handleBooksBlur}
+              className="font-mono text-xs"
+            />
+            {(settings.userBooks ?? []).length === 0 && (
+              <p className="text-xs text-amber-500/80">
+                No books configured — edge uses best price across all books (phantom edge possible).
+              </p>
+            )}
           </div>
         </div>
       </section>

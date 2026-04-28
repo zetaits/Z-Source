@@ -390,6 +390,7 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     h2h,
     intangibles,
     unitBankrollFraction: DEFAULT_UNIT_BANKROLL_FRACTION,
+    userBooks: settingsStore.get().userBooks,
     generatedAt,
   };
 

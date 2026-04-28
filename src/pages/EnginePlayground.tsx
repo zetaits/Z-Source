@@ -4,6 +4,7 @@ import type { MarketKey } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import type { Splits } from "@/domain/splits";
 import {
+  DEFAULT_LEG_CAPS,
   DEFAULT_LEG_WEIGHTS,
   DEFAULT_STAKE_POLICY,
   type StrategyConfig,
@@ -54,6 +55,8 @@ const mkSnap = (marketKey: MarketKey, offers: BookOffer[], isOpener = false): Li
 
 const defaultStrategy = (): StrategyConfig => ({
   legWeights: DEFAULT_LEG_WEIGHTS,
+  legCaps: DEFAULT_LEG_CAPS,
+  minLegsAlignedForBonded: 3,
   stakePolicy: DEFAULT_STAKE_POLICY,
   rules: [],
   enabledMarkets: ENABLED_MARKETS,
@@ -150,6 +153,7 @@ function buildCtx(inputs: CtxInputs): AnalysisContext {
     openers: inputs.openers ?? {},
     splits: inputs.splits ?? {},
     unitBankrollFraction: DEFAULT_UNIT_BANKROLL_FRACTION,
+    userBooks: [],
     generatedAt: new Date().toISOString(),
   };
 }

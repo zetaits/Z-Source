@@ -2,7 +2,7 @@ import { PlayId } from "@/domain/ids";
 import type { PlayCandidate, Verdict } from "@/domain/play";
 import type { ReasoningEntry } from "@/domain/trace";
 import type { AnalysisContext } from "./context";
-import { combine } from "./combine";
+import { combine, type BondedMeta } from "./combine";
 import { clamp, edgePct } from "./ev";
 import { MARKET_ADAPTERS } from "./markets";
 import { RULES } from "./rules";
@@ -14,10 +14,16 @@ const uid = (): string =>
     ? crypto.randomUUID()
     : `play_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
-const deriveVerdict = (edge: number, confidence: number): Verdict => {
-  if (edge >= 0.08 && confidence >= 0.7) return "STRONG";
-  if (edge >= 0.04 && confidence >= 0.5) return "PLAY";
-  if (edge >= 0.02) return "LEAN";
+const deriveVerdict = (
+  edge: number,
+  confidence: number,
+  meta: BondedMeta,
+  minLegsAligned: number,
+): Verdict => {
+  const bonded = meta.positiveLegsCount >= minLegsAligned && !meta.negativeStrong;
+  if (edge >= 0.08 && confidence >= 0.7 && bonded) return "STRONG";
+  if (edge >= 0.04 && confidence >= 0.5 && bonded) return "PLAY";
+  if (edge >= 0.02 && meta.positiveLegsCount >= 2 && !meta.negativeStrong) return "LEAN";
   return "PASS";
 };
 
@@ -79,9 +85,14 @@ export const runBondedAnalysis = (
         if (out) outputs.push(out);
       }
 
-      const combined = combine(outputs, baseProb, strategy.legWeights);
+      const combined = combine(outputs, baseProb, strategy.legWeights, strategy.legCaps);
       const edge = edgePct(combined.fairProb, price.decimal);
-      const verdict = deriveVerdict(edge, combined.confidence);
+      const verdict = deriveVerdict(
+        edge,
+        combined.confidence,
+        combined.meta,
+        strategy.minLegsAlignedForBonded,
+      );
 
       if (verdict === "PASS" && !opts.includePass) continue;
 
@@ -98,6 +109,13 @@ export const runBondedAnalysis = (
           })
         : 0;
 
+      const bonded =
+        combined.meta.positiveLegsCount >= strategy.minLegsAlignedForBonded &&
+        !combined.meta.negativeStrong;
+
+      const bookFilterFallback =
+        ctx.userBooks.length > 0 && !ctx.userBooks.includes(price.book);
+
       const trace: ReasoningEntry[] = [
         {
           source: "adapter",
@@ -107,19 +125,34 @@ export const runBondedAnalysis = (
           message: `${adapter.label} · vig-free prob ${(baseProb * 100).toFixed(1)}% @ ${price.decimal.toFixed(2)}`,
           data: { baseProb, priceDecimal: price.decimal, book: price.book },
         },
+        ...(bookFilterFallback
+          ? [
+              {
+                source: "adapter" as const,
+                id: "book-filter",
+                verdict: "NEUTRAL" as const,
+                weight: 0,
+                message: `Best price from ${price.book} — not in your book list; phantom edge possible`,
+                data: { userBooks: ctx.userBooks, offerBook: price.book },
+              },
+            ]
+          : []),
         ...outputs.map(outputToEntry),
         {
           source: "math",
           id: "combined",
           verdict: combined.overallSignal > 0 ? "SUPPORT" : combined.overallSignal < 0 ? "AGAINST" : "NEUTRAL",
           weight: 1,
-          message: `Fair prob ${(combined.fairProb * 100).toFixed(1)}% · edge ${(edge * 100).toFixed(2)}% · confidence ${(combined.confidence * 100).toFixed(0)}%`,
+          message: `Fair prob ${(combined.fairProb * 100).toFixed(1)}% · edge ${(edge * 100).toFixed(2)}% · confidence ${(combined.confidence * 100).toFixed(0)}% · ${bonded ? "bonded ✓" : "not bonded"}`,
           data: {
             perLegSignal: combined.perLegSignal,
             overallSignal: combined.overallSignal,
             fairProb: combined.fairProb,
             edgePct: edge,
             confidence: combined.confidence,
+            bonded,
+            positiveLegsCount: combined.meta.positiveLegsCount,
+            negativeStrong: combined.meta.negativeStrong,
           },
         },
       ];
@@ -140,6 +173,6 @@ export const runBondedAnalysis = (
     }
   }
 
-  candidates.sort((a, b) => b.edgePct - a.edgePct);
+  candidates.sort((a, b) => b.edgePct * b.confidence - a.edgePct * a.confidence);
   return candidates;
 };

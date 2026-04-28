@@ -51,7 +51,7 @@ describe("runBondedAnalysis", () => {
     expect(draw?.trace.some((e) => e.id === "draw-value-375")).toBe(false);
   });
 
-  it("line-movement-vs-public triggers on reverse line movement", () => {
+  it("sharpSquareDetector fires RLM when splits + opener show reverse movement", () => {
     const opener = ml1x2Snapshot(2.6, 3.4, 2.9, true);
     const current = ml1x2Snapshot(2.2, 3.4, 3.3);
     const splits = {
@@ -71,7 +71,9 @@ describe("runBondedAnalysis", () => {
     });
     const plays = runBondedAnalysis(ctx, { includePass: true });
     const home = plays.find((p) => selectionKey(p.selection) === "ML_1X2:home");
-    expect(home?.trace.some((e) => e.id === "line-movement-vs-public")).toBe(true);
+    const entry = home?.trace.find((e) => e.id === "sharp-square-detector");
+    expect(entry?.verdict).toBe("SUPPORT");
+    expect(entry?.data?.pattern).toBe("REVERSE_LINE_MOVEMENT");
   });
 
   it("respects disabled markets in strategy", () => {
@@ -93,7 +95,7 @@ describe("runBondedAnalysis", () => {
     }
   });
 
-  it("sorts plays by edge descending", () => {
+  it("sorts plays by edge × confidence descending", () => {
     const ctx = makeCtx({
       lines: {
         ML_1X2: ml1x2Snapshot(2.2, 3.9, 4.2),
@@ -102,7 +104,9 @@ describe("runBondedAnalysis", () => {
     });
     const plays = runBondedAnalysis(ctx, { includePass: true });
     for (let i = 1; i < plays.length; i++) {
-      expect(plays[i - 1].edgePct).toBeGreaterThanOrEqual(plays[i].edgePct);
+      const scoreA = plays[i - 1].edgePct * plays[i - 1].confidence;
+      const scoreB = plays[i].edgePct * plays[i].confidence;
+      expect(scoreA).toBeGreaterThanOrEqual(scoreB);
     }
   });
 

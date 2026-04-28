@@ -1,0 +1,33 @@
+"Bonded betting methology", esencialmente, se basa en:
+1. Matchup analysis
+2. Trends
+3. Line analysis
+4. Sharp vs Square Sentiment
+5. Intangibles
+
+1. Matchup Analysis: Asimetría Táctica y Métricas Subyacentes
+No perdemos el tiempo mirando quién tiene más posesión o mejores individualidades. Aquí cruzamos perfiles tácticos utilizando datos. Busco mismatches estructurales.
+Por ejemplo: si el Equipo A basa su salida de balón en centrales lentos y tiene métricas de Build-up under pressure mediocres, y el Equipo B tiene un PPDA (Pases Permitidos por Acción Defensiva) de élite y genera un alto volumen de High Turnovers, ahí tienes un matchup letal. Lo mismo aplica a balón parado: cruzar el xG generado en Set Pieces contra un equipo que defiende en zona con un ratio alto de errores en segundas jugadas. El matchup no te dice quién gana, te dice dónde se va a romper el modelo de la casa.
+2. Trends: Regresión y Spots Situacionales
+La prensa y los squares se quedan en el "lleva 5 victorias seguidas" o el "nunca ha ganado en este estadio". Basura. Los trends que operamos buscan la regresión a la media y los spots de fatiga.
+Regresión: Analizo el diferencial de Puntos Esperados (xPoints) frente a los Puntos Reales. Si un equipo lleva una racha tremenda pero está sobre-rindiendo masivamente su xG a favor (por varianza pura en la definición) y su portero tiene un PSxG (Post-Shot Expected Goals) insostenible, la tendencia real es que el desplome es inminente. El mercado suele sobrevalorar esos resultados recientes.
+Situacionales: El clásico letdown spot o lookahead spot. Un equipo de tabla media jugando de visitante un domingo a las 14:00, después de haber vaciado el tanque físico en una eliminatoria europea el jueves por la noche. Los modelos ajustan el cansancio, pero a menudo se quedan cortos ante la rotación real obligada del XI.
+3. Line Analysis: Captura del CLV y Resistencia Asiática
+No miro el 1X2 de Bet365, miro de dónde sale la apertura en los mercados asiáticos (Singbet, ISN, IBC) y cómo se comporta hacia el cierre.
+Si abren a un equipo en Hándicap Asiático -0.25 con cuota par, y el dinero temprano lo empuja rápidamente al -0.5, estudio si ese salto fue por dinero de sindicatos o un ajuste algorítmico automatizado. Si la línea hace resistencia en el -0.5 y empieza a rebotar, busco el valor en el buyback. El único objetivo aquí es que la apuesta que yo meta el viernes tenga un Closing Line Value (CLV) positivo cuando suene el pitido inicial el domingo. Si superamos sistemáticamente a la línea de cierre de Pinnacle, el largo plazo está asegurado.
+4. Sharp vs Square Sentiment: Aislando el Ruido en Equipos "Públicos"
+En fútbol de ligas top (Premier, LaLiga, Champions), el volumen del público distorsiona los precios. El Real Madrid, el Bayern o el Manchester City siempre tienen un "impuesto público" en sus cuotas.
+Lo que operamos aquí es la divergencia entre el porcentaje de tickets y el porcentaje de dinero, buscando el Reverse Line Movement (RLM). Si el 85% del público está apostando al Over 2.5 o 3.0 en un derbi porque "siempre hay goles", pero el mercado principal empieza a aplastar la cuota del Under (bajando la línea principal a 2.5 o incluso 2.25), la lectura es clara: los sharps han entrado con el límite máximo al Under. El modelo debe alinearse con el dinero inteligente, no con el volumen recreacional.
+5. Intangibles: Asimetría de Información
+Este es el único punto donde el factor humano puede ganar al algoritmo por anticipación. Es la información que el modelo matemático no puede pricear a tiempo.
+Hablamos de un cambio de entrenador que genera el clásico New Manager Bounce, un campo completamente anegado por lluvia de última hora que destruye la ventaja del matchup de un equipo dominador por bajo, o problemas de impagos y vestuarios rotos. También el peso específico de una baja no anunciada; si el pivote defensivo que equilibra todas las transiciones del Equipo A se lesiona en el calentamiento, mi valoración del xG en contra de ese equipo salta automáticamente un 0.4. Quien procesa y reacciona a ese intangible antes de que la pantalla parpadee y la casa ajuste la cuota, se lleva el valor.
+
+Esta es la base principal pero con el tiempo aparecen cosas que se salen del modelo y que merecen la pena analizar y operar:
+Concepto 1: Optimización de Valor y Uso de "Anclas"
+La premisa central es que la "seguridad" en las apuestas tiene un precio, y los mercados de cobertura tradicionales suelen reducir tu ventaja matemática (-EV). Sin embargo, combinando el mercado adecuado con variables adicionales, puedes transformar una cuota pobre en una apuesta de alto valor.
+El concepto se divide en cuatro principios fundamentales:
+- La trampa del falso seguro: Usar la Doble Oportunidad simplemente para proteger una apuesta donde tu análisis dice que el equipo va a ganar es un error. Estás cortando tus beneficios, pagando un margen extra a la casa y apostando a un resultado (el empate) que no consideras probable.
+- La alternativa eficiente (Draw No Bet): Si tu modelo detecta que un equipo ganará, pero quieres reducir el riesgo, el mercado DNB (Empate Apuesta No Válida) es la ruta óptima. Te protege del empate sin sacrificar tanta cuota.
+- La verdadera Doble Oportunidad: Este mercado solo se usa cuando tu análisis detecta que el rival está muy sobrevalorado. Aquí ves valor real e independiente tanto en la victoria de tu equipo como en el empate.
+- La Estrategia del "Ancla": ¿Qué pasa cuando el análisis dicta una Doble Oportunidad, pero la cuota es demasiado baja (por ejemplo, 1.50) para ser rentable a largo plazo? En lugar de descartarla o aceptarla con mal valor, se le añade un "ancla". Un ancla es un mercado secundario altamente probable según el análisis del mismo partido (típicamente los mercados de Más/Menos Goles). Al combinar la Doble Oportunidad con un "Menos de 4 goles", impulsas la cuota a un rango de valor aceptable (por ejemplo, 1.70 o 1.80).
+Hay mas conceptos como Fade The Public o que la linea de empate cuando esta baja suele tener valor

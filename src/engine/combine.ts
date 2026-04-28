@@ -1,10 +1,8 @@
-import type { LegWeights, Leg } from "@/domain/strategy";
+import type { AdjustingLeg, Leg, LegCaps, LegWeights } from "@/domain/strategy";
 import type { RuleOutput } from "./types";
 import { clamp } from "./ev";
 
-export const MAX_PROB_SHIFT = 0.12;
-
-const ADJUSTING_LEGS: Leg[] = [
+const ADJUSTING_LEGS: AdjustingLeg[] = [
   "matchup",
   "trends",
   "lines",
@@ -12,11 +10,17 @@ const ADJUSTING_LEGS: Leg[] = [
   "intangibles",
 ];
 
+export interface BondedMeta {
+  positiveLegsCount: number;
+  negativeStrong: boolean;
+}
+
 export interface CombinedSignal {
   fairProb: number;
   confidence: number;
   perLegSignal: Record<Leg, number>;
   overallSignal: number;
+  meta: BondedMeta;
 }
 
 const legSignal = (items: RuleOutput[]): number => {
@@ -33,6 +37,7 @@ export const combine = (
   outputs: RuleOutput[],
   baseProb: number,
   legWeights: LegWeights,
+  legCaps: LegCaps,
 ): CombinedSignal => {
   const byLeg = new Map<Leg, RuleOutput[]>();
   for (const o of outputs) {
@@ -54,6 +59,14 @@ export const combine = (
     perLegSignal[leg] = legSignal(items);
   }
 
+  // fairProb: each adjusting leg contributes perLegSignal[leg] * cap[leg]
+  const probShift = ADJUSTING_LEGS.reduce(
+    (s, l) => s + perLegSignal[l] * legCaps[l],
+    0,
+  );
+  const fairProb = clamp(baseProb + probShift, 0.001, 0.999);
+
+  // overallSignal: weighted mean of adjusting leg signals (used for confidence)
   const totalWeight = ADJUSTING_LEGS.reduce((s, l) => s + legWeights[l], 0);
   const overallSignal =
     totalWeight > 0
@@ -63,8 +76,7 @@ export const combine = (
         ) / totalWeight
       : 0;
 
-  const fairProb = clamp(baseProb + overallSignal * MAX_PROB_SHIFT, 0.001, 0.999);
-
+  // confidence: sign-aware — 0 when overall signal is not positive
   const weightedMean = overallSignal;
   const varWeighted =
     totalWeight > 0
@@ -75,7 +87,26 @@ export const combine = (
         ) / totalWeight
       : 0;
   const stddev = Math.sqrt(varWeighted);
-  const confidence = clamp(1 - stddev, 0, 1);
 
-  return { fairProb, confidence, perLegSignal, overallSignal };
+  const positiveLegsCount = ADJUSTING_LEGS.filter(
+    (l) => perLegSignal[l] > 0,
+  ).length;
+  const negativeStrong = ADJUSTING_LEGS.some((l) => perLegSignal[l] < -0.4);
+
+  const confidence =
+    overallSignal > 0
+      ? clamp(
+          (1 - stddev) * (positiveLegsCount / ADJUSTING_LEGS.length),
+          0,
+          1,
+        )
+      : 0;
+
+  return {
+    fairProb,
+    confidence,
+    perLegSignal,
+    overallSignal,
+    meta: { positiveLegsCount, negativeStrong },
+  };
 };
