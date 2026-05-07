@@ -11,6 +11,8 @@ export interface TeamFormGame {
   goalsFor: number;
   goalsAgainst: number;
   result: FormResult;
+  xGFor?: number;
+  xGAgainst?: number;
 }
 
 export interface TeamForm {
@@ -22,6 +24,10 @@ export interface TeamForm {
   cleanSheets: number;
   bttsRate: number;
   ppgLast: number;
+  xGForLast?: number;
+  xGAgainstLast?: number;
+  xPointsLast?: number;
+  pointsLast?: number;
 }
 
 export interface H2H {

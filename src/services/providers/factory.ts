@@ -1,10 +1,8 @@
 import { createActionNetworkSplitProvider } from "@/services/impl/actionNetworkSplitProvider";
 import { createOddsApiIoProvider } from "@/services/impl/oddsApiIoProvider";
-import { createOddsApiProvider } from "@/services/impl/oddsApiProvider";
 import { createSofaScoreHistoryProvider } from "@/services/impl/sofaScoreHistoryProvider";
 import {
   oddsApiIoQuota,
-  oddsApiQuota,
   type QuotaTracker,
 } from "@/services/http/quotaTracker";
 import type {
@@ -18,6 +16,8 @@ import type { OddsProvider } from "./OddsProvider";
 import type { SplitProvider } from "./SplitProvider";
 import { createFallbackOddsProvider } from "./FallbackOddsProvider";
 
+const FIXED_ODDS_ORDER: OddsProviderId[] = ["odds-api-io"];
+
 export interface ResolvedProviders {
   odds: OddsProvider;
   oddsComponents: { id: OddsProviderId; provider: OddsProvider; configured: boolean }[];
@@ -30,34 +30,24 @@ const buildOddsComponent = (
   id: OddsProviderId,
   settings: AppSettings,
 ): { id: OddsProviderId; provider: OddsProvider; configured: boolean } => {
-  if (id === "the-odds-api") {
-    const provider = createOddsApiProvider(() => ({
-      apiKey: settings.oddsApiKey ?? "",
-      region: settings.oddsRegion,
-      oddsFormat: "decimal",
-    }));
-    return { id, provider, configured: Boolean(settings.oddsApiKey) };
-  }
   const provider = createOddsApiIoProvider(() => ({
     apiKey: settings.oddsApiIoKey ?? "",
     sportSlug: "football",
+    bookmakers: settings.userBooks.length > 0 ? settings.userBooks : undefined,
   }));
   return { id, provider, configured: Boolean(settings.oddsApiIoKey) };
 };
 
-const trackerForId = (id: OddsProviderId): QuotaTracker =>
-  id === "the-odds-api" ? oddsApiQuota : oddsApiIoQuota;
+const trackerForId = (_id: OddsProviderId): QuotaTracker => oddsApiIoQuota;
 
 const buildSplitProvider = (_id: SplitProviderId): SplitProvider =>
   createActionNetworkSplitProvider();
 
-const buildHistoryProvider = (_id: HistoryProviderId): HistoryProvider =>
-  createSofaScoreHistoryProvider();
+const buildHistoryProvider = (_id: HistoryProviderId, settings: AppSettings): HistoryProvider =>
+  createSofaScoreHistoryProvider(settings.footballDataApiKey ?? undefined);
 
 export const resolveProviders = (settings: AppSettings): ResolvedProviders => {
-  const order = settings.oddsProviderOrder.length > 0
-    ? settings.oddsProviderOrder
-    : (["odds-api-io", "the-odds-api"] as OddsProviderId[]);
+  const order = FIXED_ODDS_ORDER;
 
   const oddsComponents = order.map((id) => buildOddsComponent(id, settings));
   const configured = oddsComponents.filter((c) => c.configured);
@@ -72,7 +62,7 @@ export const resolveProviders = (settings: AppSettings): ResolvedProviders => {
     odds,
     oddsComponents,
     splits: buildSplitProvider(settings.splitProviderId),
-    history: buildHistoryProvider(settings.historyProviderId),
+    history: buildHistoryProvider(settings.historyProviderId, settings),
     quotaTrackers,
   };
 };

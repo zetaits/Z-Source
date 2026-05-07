@@ -97,14 +97,6 @@ export function OddsApiKeyCard({ settings, onUpdate }: Props) {
           current={settings.oddsApiIoKey}
           onSave={(v) => onUpdate({ oddsApiIoKey: v })}
         />
-        <KeyRow
-          id="the-odds-api-key"
-          title="the-odds-api.com"
-          hint="Free · 500 req/month"
-          placeholder="paste your the-odds-api.com key"
-          current={settings.oddsApiKey}
-          onSave={(v) => onUpdate({ oddsApiKey: v })}
-        />
       </div>
     </section>
   );

@@ -4,7 +4,7 @@ import type { H2H, Intangibles, TeamForm } from "@/domain/history";
 import type { CatalogMatch, Match } from "@/domain/match";
 import type { MarketKey, Selection } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
-import type { PlayCandidate } from "@/domain/play";
+import type { ComboPlay, PlayCandidate } from "@/domain/play";
 import type { Splits } from "@/domain/splits";
 import type { StrategyConfig } from "@/domain/strategy";
 import { findLeagueById } from "@/config/leagues";
@@ -30,6 +30,7 @@ export interface ResolutionInfo {
 
 export interface AnalysisResult {
   plays: PlayCandidate[];
+  combos: ComboPlay[];
   lines: Partial<Record<MarketKey, LineSnapshot>>;
   openers: Partial<Record<MarketKey, LineSnapshot>>;
   splits: Partial<Record<MarketKey, Splits>>;
@@ -64,10 +65,13 @@ const indexByMarket = (snaps: LineSnapshot[]): Partial<Record<MarketKey, LineSna
   return out;
 };
 
-const persistOpeners = async (matchId: MatchId, snaps: LineSnapshot[]): Promise<void> => {
+const persistSnapshots = async (
+  matchId: MatchId,
+  snaps: LineSnapshot[],
+  isOpener: boolean,
+): Promise<void> => {
   if (!isPersistentStorage() || snaps.length === 0) return;
-  const already = await snapshotsRepo.hasOpener(matchId);
-  if (already) return;
+  if (isOpener && (await snapshotsRepo.hasOpener(matchId))) return;
   for (const snap of snaps) {
     for (const offer of snap.offers) {
       await snapshotsRepo.recordOffer({
@@ -77,24 +81,7 @@ const persistOpeners = async (matchId: MatchId, snaps: LineSnapshot[]): Promise<
         priceDecimal: offer.decimal,
         book: offer.book,
         takenAt: offer.takenAt,
-        isOpener: true,
-      });
-    }
-  }
-};
-
-const persistCurrent = async (matchId: MatchId, snaps: LineSnapshot[]): Promise<void> => {
-  if (!isPersistentStorage() || snaps.length === 0) return;
-  for (const snap of snaps) {
-    for (const offer of snap.offers) {
-      await snapshotsRepo.recordOffer({
-        matchId,
-        marketKey: snap.marketKey,
-        selection: offer.selection,
-        priceDecimal: offer.decimal,
-        book: offer.book,
-        takenAt: offer.takenAt,
-        isOpener: false,
+        isOpener,
       });
     }
   }
@@ -205,19 +192,45 @@ const resolveWithProvider = async (
   return { oddsProviderId: providerId, oddsEventId, confidence: result.confidence, resolvedAt };
 };
 
-const LEG_TIMEOUT_MS = 20_000;
+const LEG_TIMEOUT_MS = 35_000;
 
-const withTimeout = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
-  Promise.race([
-    p,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
+const withTimeout = <T>(
+  factory: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  fallback: T,
+  parentSignal?: AbortSignal,
+): Promise<T> => {
+  const ctrl = new AbortController();
+  if (parentSignal) {
+    if (parentSignal.aborted) ctrl.abort();
+    else parentSignal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      ctrl.abort();
+      resolve(fallback);
+    }, ms);
+  });
+  const work = factory(ctrl.signal).catch(() => fallback);
+  return Promise.race([work, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+};
 
-const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
+type OddsTrackResult =
+  | { kind: "ok"; matchId: MatchId; snapshots: LineSnapshot[]; openers: Partial<Record<MarketKey, LineSnapshot>>; resolution: ResolutionInfo }
+  | { kind: "unresolved"; bestPartial: ResolutionInfo | null; lastError: Error | null }
+  | { kind: "empty-odds"; resolution: ResolutionInfo }
+  | { kind: "error"; message: string; resolution?: ResolutionInfo };
+
+const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Promise<AnalysisResult> => {
   const strategy = await loadStrategy();
   const generatedAt = new Date().toISOString();
-  const emptyResult = (status: AnalysisStatus, message?: string): AnalysisResult => ({
+
+  const baseEmpty = (): Omit<AnalysisResult, "status" | "message" | "resolution"> => ({
     plays: [],
+    combos: [],
     lines: {},
     openers: {},
     splits: {},
@@ -226,73 +239,180 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     historyAvailable: false,
     historyProvider: "",
     strategy,
-    status,
-    message,
     generatedAt,
   });
 
   const league = findLeagueById(String(match.leagueId));
-  if (!league) return emptyResult("error", `Unknown league ${match.leagueId}`);
+  if (!league) return { ...baseEmpty(), status: "error", message: `Unknown league ${match.leagueId}` };
 
   const settings = await settingsStore.load();
   const { oddsComponents, splits: splitProvider, history: historyProvider } =
     resolveProviders(settings);
   const configured = oddsComponents.filter((c) => c.configured);
-  if (configured.length === 0) return emptyResult("no-api-key");
-
-  let chosen: ResolutionAttempt | null = null;
-  let bestPartial: ResolutionInfo | null = null;
-  let lastError: Error | null = null;
-  for (const comp of configured) {
-    try {
-      const info = await resolveWithProvider(match, comp.id, comp.provider, league.oddsApiKey);
-      if (info.oddsEventId) {
-        chosen = { providerId: comp.id, provider: comp.provider, info };
-        break;
-      }
-      if (!bestPartial || info.confidence > bestPartial.confidence) bestPartial = info;
-    } catch (err) {
-      lastError = err as Error;
-    }
-  }
-
-  if (!chosen) {
-    if (bestPartial) {
-      const pct = Math.round(bestPartial.confidence * 100);
-      return {
-        ...emptyResult(
-          "unresolved",
-          `No odds-provider event matched this fixture (best confidence ${pct}%).`,
-        ),
-        resolution: bestPartial,
-      };
-    }
-    return emptyResult("error", lastError?.message ?? "All odds providers failed to resolve");
-  }
-
-  const { provider: oddsProvider, info: resolution } = chosen;
-  const matchId = MatchId(resolution.oddsEventId!);
-  const engineMatch = toMatch(match, matchId);
+  if (configured.length === 0) return { ...baseEmpty(), status: "no-api-key" };
 
   const requestedMarkets = strategy.enabledMarkets.length > 0
     ? strategy.enabledMarkets
     : (["ML_1X2", "AH", "OU_GOALS"] as MarketKey[]);
 
-  let snapshots: LineSnapshot[];
-  try {
-    snapshots = await oddsProvider.getOdds(matchId, requestedMarkets, {
-      sportKey: league.oddsApiKey,
-    });
-  } catch (err) {
-    return { ...emptyResult("error", (err as Error).message), resolution };
+  // Stable team IDs derived from catalog (don't need odds resolution)
+  const homeTeamId = TeamId(`${match.catalogId}:home`);
+  const awayTeamId = TeamId(`${match.catalogId}:away`);
+  const catalogMatchId = MatchId(match.catalogId);
+
+  // Odds resolution and history fetch run in parallel
+  const [oddsTrack, homeForm, awayForm, h2h, intangibles] = await Promise.all([
+    (async (): Promise<OddsTrackResult> => {
+      let chosen: ResolutionAttempt | null = null;
+      let bestPartial: ResolutionInfo | null = null;
+      let lastError: Error | null = null;
+      for (const comp of configured) {
+        try {
+          const info = await resolveWithProvider(match, comp.id, comp.provider, league.oddsApiKey);
+          if (info.oddsEventId) {
+            chosen = { providerId: comp.id, provider: comp.provider, info };
+            break;
+          }
+          if (!bestPartial || info.confidence > bestPartial.confidence) bestPartial = info;
+        } catch (err) {
+          lastError = err as Error;
+        }
+      }
+      if (!chosen) return { kind: "unresolved", bestPartial, lastError };
+
+      const { provider: oddsProvider, info: resolution } = chosen;
+      const matchId = MatchId(resolution.oddsEventId!);
+
+      let snapshots: LineSnapshot[];
+      try {
+        snapshots = await oddsProvider.getOdds(matchId, requestedMarkets, {
+          sportKey: league.oddsApiKey,
+          signal: parentSignal,
+        });
+      } catch (err) {
+        return { kind: "error", message: (err as Error).message, resolution };
+      }
+
+      if (snapshots.length === 0) {
+        return { kind: "empty-odds", resolution };
+      }
+
+      await Promise.all([
+        persistSnapshots(matchId, snapshots, true).catch(() => {}),
+        persistSnapshots(matchId, snapshots, false).catch(() => {}),
+      ]);
+      const openers = await loadOpeners(matchId).catch(() => ({}));
+
+      return { kind: "ok", matchId, snapshots, openers, resolution };
+    })(),
+
+    withTimeout(
+      (signal) =>
+        historyProvider.getForm(homeTeamId, FORM_LAST_N, {
+          sofaScoreTeamId: match.home.sofaScoreId,
+          teamName: match.home.name,
+          signal,
+        }),
+      LEG_TIMEOUT_MS,
+      undefined,
+      parentSignal,
+    ),
+    withTimeout(
+      (signal) =>
+        historyProvider.getForm(awayTeamId, FORM_LAST_N, {
+          sofaScoreTeamId: match.away.sofaScoreId,
+          teamName: match.away.name,
+          signal,
+        }),
+      LEG_TIMEOUT_MS,
+      undefined,
+      parentSignal,
+    ),
+    withTimeout(
+      (signal) =>
+        historyProvider.getH2H(homeTeamId, awayTeamId, {
+          homeSofaScoreId: match.home.sofaScoreId,
+          awaySofaScoreId: match.away.sofaScoreId,
+          homeTeamName: match.home.name,
+          awayTeamName: match.away.name,
+          sofaEventId:
+            match.source === "sofascore" ? Number(match.catalogId) : undefined,
+          kickoffAt: match.kickoffAt,
+          fdorgMatchId: match.fdorgMatchId,
+          homeFdorgTeamId: match.home.fdorgTeamId,
+          awayFdorgTeamId: match.away.fdorgTeamId,
+          signal,
+        }),
+      LEG_TIMEOUT_MS,
+      undefined,
+      parentSignal,
+    ),
+    withTimeout(
+      (signal) =>
+        historyProvider.getIntangibles(catalogMatchId, {
+          homeSofaScoreId: match.home.sofaScoreId,
+          awaySofaScoreId: match.away.sofaScoreId,
+          homeTeamName: match.home.name,
+          awayTeamName: match.away.name,
+          sofaEventId:
+            match.source === "sofascore" ? Number(match.catalogId) : undefined,
+          kickoffAt: match.kickoffAt,
+          signal,
+        }),
+      LEG_TIMEOUT_MS,
+      undefined,
+      parentSignal,
+    ),
+  ]);
+
+  const historyAvailable =
+    (homeForm?.games.length ?? 0) > 0 ||
+    (awayForm?.games.length ?? 0) > 0 ||
+    (h2h?.meetings.length ?? 0) > 0 ||
+    intangibles?.homeRestDays !== undefined ||
+    intangibles?.awayRestDays !== undefined;
+
+  const historyBase = {
+    homeForm,
+    awayForm,
+    h2h,
+    intangibles,
+    historyAvailable,
+    historyProvider: historyProvider.name,
+  };
+
+  // Non-ok odds paths: return history data but no plays
+  if (oddsTrack.kind !== "ok") {
+    if (oddsTrack.kind === "unresolved") {
+      const pct = Math.round((oddsTrack.bestPartial?.confidence ?? 0) * 100);
+      return {
+        ...baseEmpty(),
+        ...historyBase,
+        status: "unresolved",
+        message: `No odds-provider event matched this fixture (best confidence ${pct}%).`,
+        resolution: oddsTrack.bestPartial ?? undefined,
+      };
+    }
+    if (oddsTrack.kind === "empty-odds") {
+      return {
+        ...baseEmpty(),
+        ...historyBase,
+        status: "empty-odds",
+        message: "Provider returned no odds for this fixture.",
+        resolution: oddsTrack.resolution,
+      };
+    }
+    return {
+      ...baseEmpty(),
+      ...historyBase,
+      status: "error",
+      message: oddsTrack.message,
+      resolution: oddsTrack.resolution,
+    };
   }
 
-  if (snapshots.length === 0) {
-    return { ...emptyResult("empty-odds", "Provider returned no odds for this fixture."), resolution };
-  }
-
-  await persistOpeners(matchId, snapshots).catch(() => {});
-  await persistCurrent(matchId, snapshots).catch(() => {});
+  const { matchId, snapshots, openers, resolution } = oddsTrack;
+  const engineMatch = toMatch(match, matchId);
 
   const linesByMarket: Partial<Record<MarketKey, number[]>> = {};
   for (const snap of snapshots) {
@@ -303,80 +423,24 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     if (lines.size > 0) linesByMarket[snap.marketKey] = [...lines].sort((a, b) => a - b);
   }
 
-  const [openers, splitsList, homeForm, awayForm, h2h, intangibles] = await Promise.all([
-    loadOpeners(matchId).catch(() => ({})),
-    withTimeout(
-      splitProvider
-        .getSplits(matchId, requestedMarkets, {
-          linesByMarket,
-          matchContext: {
-            homeName: engineMatch.home.name,
-            awayName: engineMatch.away.name,
-            kickoffAt: engineMatch.kickoffAt,
-          },
-        })
-        .catch(() => null),
-      LEG_TIMEOUT_MS,
-      null,
-    ),
-    withTimeout(
-      historyProvider
-        .getForm(engineMatch.home.id, FORM_LAST_N, {
-          sofaScoreTeamId: match.home.sofaScoreId,
-          teamName: match.home.name,
-        })
-        .catch(() => undefined),
-      LEG_TIMEOUT_MS,
-      undefined,
-    ),
-    withTimeout(
-      historyProvider
-        .getForm(engineMatch.away.id, FORM_LAST_N, {
-          sofaScoreTeamId: match.away.sofaScoreId,
-          teamName: match.away.name,
-        })
-        .catch(() => undefined),
-      LEG_TIMEOUT_MS,
-      undefined,
-    ),
-    withTimeout(
-      historyProvider
-        .getH2H(engineMatch.home.id, engineMatch.away.id, {
-          homeSofaScoreId: match.home.sofaScoreId,
-          awaySofaScoreId: match.away.sofaScoreId,
-          sofaEventId:
-            match.source === "sofascore" ? Number(match.catalogId) : undefined,
-          kickoffAt: match.kickoffAt,
-        })
-        .catch(() => undefined),
-      LEG_TIMEOUT_MS,
-      undefined,
-    ),
-    withTimeout(
-      historyProvider
-        .getIntangibles(matchId, {
-          homeSofaScoreId: match.home.sofaScoreId,
-          awaySofaScoreId: match.away.sofaScoreId,
-          sofaEventId:
-            match.source === "sofascore" ? Number(match.catalogId) : undefined,
-          kickoffAt: match.kickoffAt,
-        })
-        .catch(() => undefined),
-      LEG_TIMEOUT_MS,
-      undefined,
-    ),
-  ]);
+  const splitsList = await withTimeout(
+    (signal) =>
+      splitProvider.getSplits(matchId, requestedMarkets, {
+        linesByMarket,
+        matchContext: {
+          homeName: engineMatch.home.name,
+          awayName: engineMatch.away.name,
+          kickoffAt: engineMatch.kickoffAt,
+        },
+        signal,
+      }),
+    LEG_TIMEOUT_MS,
+    null,
+    parentSignal,
+  );
 
   const splits = splitsList ? indexSplits(splitsList) : {};
   const splitsAvailable = Boolean(splitsList && splitsList.length > 0);
-  const splitsProvider = splitProvider.name;
-  const historyAvailable =
-    (homeForm?.games.length ?? 0) > 0 ||
-    (awayForm?.games.length ?? 0) > 0 ||
-    (h2h?.meetings.length ?? 0) > 0 ||
-    intangibles?.homeRestDays !== undefined ||
-    intangibles?.awayRestDays !== undefined;
-  const historyProviderName = historyProvider.name;
   const lines = indexByMarket(snapshots);
 
   const ctx: AnalysisContext = {
@@ -394,20 +458,16 @@ const runAnalysis = async (match: CatalogMatch): Promise<AnalysisResult> => {
     generatedAt,
   };
 
-  const plays = runBondedAnalysis(ctx, { includePass: false });
+  const { candidates: plays, combos } = runBondedAnalysis(ctx, { includePass: false });
   return {
     plays,
+    combos,
     lines,
     openers,
     splits,
     splitsAvailable,
-    splitsProvider,
-    homeForm,
-    awayForm,
-    h2h,
-    intangibles,
-    historyAvailable,
-    historyProvider: historyProviderName,
+    splitsProvider: splitProvider.name,
+    ...historyBase,
     strategy,
     status: "ok",
     resolution,
@@ -422,8 +482,8 @@ export const useAnalysis = (
   const strategyKey = match ? match.catalogId : "none";
   return useQuery({
     queryKey: ["analysis", strategyKey] as const,
-    queryFn: async () => {
-      const result = await runAnalysis(match!);
+    queryFn: async ({ signal }) => {
+      const result = await runAnalysis(match!, signal);
       return { ...result, fingerprint: strategyFingerprint(result.strategy) };
     },
     enabled: Boolean(match) && opts.enabled,

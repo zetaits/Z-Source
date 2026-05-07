@@ -1,60 +1,64 @@
-const SUFFIX_TOKENS = [
-  "fc",
-  "afc",
-  "cf",
-  "sc",
-  "ac",
-  "rc",
-  "cd",
-  "cp",
-  "ud",
-  "if",
-  "bk",
-  "club",
-  "calcio",
-  "deportivo",
-  "real",
-];
+// Legal/structural designations that don't carry team identity.
+const SUFFIX_TOKENS = new Set([
+  // English / general
+  "fc", "afc", "cf", "sc", "ac", "rc", "cd", "cp", "ud", "if", "bk",
+  // German
+  "vfb", "vfl", "fsv", "tsg", "msv", "sv", "kv", "tsv", "rb", "spvgg",
+  // Italian
+  "ssc", "ssd", "us", "asd", "calcio",
+  // Spanish / Portuguese
+  "rcd", "ca", "sd", "scp", "sl",
+  // French
+  "ogc", "losc", "asse",
+  // Generic
+  "club", "deportivo", "athletic",
+]);
 
+// Connector words, articles, and other linguistic noise.
+const FILLER_TOKENS = new Set([
+  "de", "du", "del", "el", "la", "le", "les", "los", "y", "und", "et",
+  "e", "di", "da", "dal", "do", "dos", "das", "van", "der", "den",
+  "of", "the", "and", "a",
+]);
+
+// Aliases reserved for abbreviations whose tokens do not overlap with the
+// canonical full form (so token-based matching cannot recover them).
 const ALIASES: Record<string, string> = {
-  "manchester city": "man city",
-  "manchester united": "man united",
-  "wolverhampton wanderers": "wolves",
-  "tottenham hotspur": "tottenham",
-  "brighton hove albion": "brighton",
-  "brighton and hove albion": "brighton",
-  "leicester city": "leicester",
-  "newcastle united": "newcastle",
-  "west ham united": "west ham",
-  "aston villa": "villa",
-  "atletico madrid": "atletico",
-  "atletico de madrid": "atletico",
-  "athletic club": "athletic bilbao",
-  "athletic": "athletic bilbao",
-  "borussia dortmund": "dortmund",
-  "borussia monchengladbach": "monchengladbach",
-  "bayern munich": "bayern",
-  "bayern munchen": "bayern",
-  "internazionale": "inter",
-  "psg": "paris saint germain",
+  psg: "paris saint germain",
   "paris sg": "paris saint germain",
-  "psv eindhoven": "psv",
+  wolves: "wolverhampton wanderers",
 };
 
 const stripDiacritics = (s: string): string =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+const cleanString = (raw: string): string =>
+  stripDiacritics(raw.toLowerCase().trim())
+    .replace(/[.,'`"’\-/]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const tokenize = (raw: string): string[] => {
+  if (!raw) return [];
+  return cleanString(raw)
+    .split(" ")
+    .filter((t) => t.length > 0);
+};
+
+const isSignificant = (t: string): boolean => {
+  if (t.length < 2) return false;
+  if (SUFFIX_TOKENS.has(t)) return false;
+  if (FILLER_TOKENS.has(t)) return false;
+  if (/^\d+$/.test(t)) return false;
+  return true;
+};
 
 export const normalizeTeamName = (raw: string): string => {
   if (!raw) return "";
-  let s = stripDiacritics(raw.toLowerCase().trim());
-  s = s.replace(/[.,'`"’]/g, "");
-  s = s.replace(/\s+/g, " ");
-  if (ALIASES[s]) return ALIASES[s];
-  const tokens = s
-    .split(" ")
-    .filter((t) => t.length > 0 && !SUFFIX_TOKENS.includes(t));
-  const cleaned = tokens.join(" ").trim();
-  return ALIASES[cleaned] ?? cleaned;
+  const cleaned = cleanString(raw);
+  if (ALIASES[cleaned]) return ALIASES[cleaned];
+  const significant = tokenize(raw).filter(isSignificant);
+  return significant.length > 0 ? significant.join(" ") : cleaned;
 };
 
 export const jaroWinkler = (a: string, b: string): number => {
@@ -97,5 +101,37 @@ export const jaroWinkler = (a: string, b: string): number => {
   return jaro + prefix * 0.1 * (1 - jaro);
 };
 
-export const teamSimilarity = (a: string, b: string): number =>
-  jaroWinkler(normalizeTeamName(a), normalizeTeamName(b));
+const TOKEN_MATCH_FLOOR = 0.85;
+
+// Token containment: each token of the shorter set must find a strong fuzzy
+// match in the longer set. Handles "Lens" ↔ "Racing Club de Lens" and
+// "Inter" ↔ "Internazionale" without needing per-team aliases.
+const tokenContainment = (a: string, b: string): { score: number; allStrong: boolean } => {
+  const ta = a.split(" ").filter((t) => t.length > 0);
+  const tb = b.split(" ").filter((t) => t.length > 0);
+  if (ta.length === 0 || tb.length === 0) return { score: 0, allStrong: false };
+  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  let total = 0;
+  let allStrong = true;
+  for (const t of shorter) {
+    let best = 0;
+    for (const u of longer) {
+      const sim = t === u ? 1 : jaroWinkler(t, u);
+      if (sim > best) best = sim;
+    }
+    if (best < TOKEN_MATCH_FLOOR) allStrong = false;
+    total += best;
+  }
+  return { score: total / shorter.length, allStrong };
+};
+
+export const teamSimilarity = (a: string, b: string): number => {
+  const na = normalizeTeamName(a);
+  const nb = normalizeTeamName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  const { score: containment, allStrong } = tokenContainment(na, nb);
+  const fullScore = jaroWinkler(na, nb);
+  if (allStrong) return Math.max(containment, fullScore);
+  return Math.max(fullScore, containment * 0.7);
+};

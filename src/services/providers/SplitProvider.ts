@@ -17,6 +17,7 @@ export interface SplitMatchContext {
 export interface SplitProviderQuery {
   linesByMarket?: Partial<Record<MarketKey, number[]>>;
   matchContext?: SplitMatchContext;
+  signal?: AbortSignal;
 }
 
 export interface SplitProvider {

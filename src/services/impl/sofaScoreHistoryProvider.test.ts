@@ -19,12 +19,13 @@ vi.mock("@/storage/repos/historyCacheRepo", async () => {
       }),
       evictOlderThan: vi.fn(async () => 0),
     },
-    formCacheKey: (teamId: number, lastN: number) => `form:${teamId}:${lastN}`,
+    formCacheKey: (teamId: number, lastN: number) => `form-v2:${teamId}:${lastN}`,
     h2hCacheKey: (a: number, b: number) => {
       const [x, y] = [a, b].sort((p, q) => p - q);
       return `h2h:${x}:${y}`;
     },
     intangiblesCacheKey: (matchId: string) => `intangibles:${matchId}`,
+    eventStatsCacheKey: (eventId: number) => `event-stats:${eventId}`,
     __cacheMap: cacheMap,
   };
 });
@@ -251,5 +252,40 @@ describe("sofaScoreHistoryProvider.getIntangibles", () => {
     expect(res.awayRestDays).toBe(3);
     expect(res.homeCongestion).toBe(1);
     expect(res.awayCongestion).toBe(0);
+  });
+
+  it("uses the most recent finished event when ASC-ordered list contains older matches", async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const oneFiftyDaysAgoSec = nowSec - 150 * 24 * 60 * 60;
+    const fourDaysAgoSec = nowSec - 4 * 24 * 60 * 60;
+
+    mockHttp
+      .mockResolvedValueOnce(
+        okJson({
+          events: [
+            // ASC order: oldest first (mirrors SofaScore last/0 endpoint)
+            finishedEvent({ id: 1, homeId: 10, startTimestamp: oneFiftyDaysAgoSec }),
+            finishedEvent({ id: 2, homeId: 10, startTimestamp: fourDaysAgoSec }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          events: [
+            finishedEvent({ id: 3, homeId: 20, startTimestamp: oneFiftyDaysAgoSec }),
+            finishedEvent({ id: 4, homeId: 20, startTimestamp: fourDaysAgoSec }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(okJson({ events: [] }))
+      .mockResolvedValueOnce(okJson({ events: [] }));
+
+    const p = createSofaScoreHistoryProvider();
+    const res = await p.getIntangibles("m1" as MatchId, {
+      homeSofaScoreId: 10,
+      awaySofaScoreId: 20,
+    });
+    expect(res.homeRestDays).toBe(4);
+    expect(res.awayRestDays).toBe(4);
   });
 });

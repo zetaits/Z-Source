@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Globe2, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,11 +17,9 @@ import {
 } from "@/components/ui/tooltip";
 import {
   HISTORY_PROVIDER_IDS,
-  ODDS_PROVIDER_IDS,
   SPLIT_PROVIDER_IDS,
   type AppSettings,
   type HistoryProviderId,
-  type OddsProviderId,
   type SplitProviderId,
 } from "@/services/settings/settingsStore";
 
@@ -37,11 +35,6 @@ const REGIONS: { value: AppSettings["oddsRegion"]; label: string }[] = [
   { value: "au", label: "Australia (au)" },
 ];
 
-const ODDS_PROVIDER_LABEL: Record<OddsProviderId, string> = {
-  "odds-api-io": "odds-api.io (100/h · free)",
-  "the-odds-api": "the-odds-api.com (500/mo · free)",
-};
-
 const SPLIT_PROVIDER_LABEL: Record<SplitProviderId, string> = {
   "action-network": "Action Network (public API)",
 };
@@ -50,34 +43,19 @@ const HISTORY_PROVIDER_LABEL: Record<HistoryProviderId, string> = {
   sofascore: "SofaScore (scraping)",
 };
 
-const ODDS_PRIMARY_HELP =
-  "Tried first on every analysis. If it errors or returns no event for the fixture, the fallback is tried next.";
-const ODDS_FALLBACK_HELP =
-  "Used only if the primary fails. Quotas: odds-api.io = 100 req/hour, the-odds-api.com = 500 req/month (both free-tier).";
 const USER_BOOKS_HELP =
-  "Comma-separated book IDs you actually have an account on (e.g. pinnacle,bet365,unibet). " +
+  "Comma-separated bookmaker names as listed by odds-api.io (e.g. Bet365, Sbobet, Unibet — capitalization matters). " +
   "Edge is computed using only those books. Leave empty to use best price across all books.";
 const SPLITS_HELP =
   "Action Network's public JSON API (money-line tickets/money %). Cached 10 min per match.";
 const HISTORY_HELP =
   "`sofascore` scrapes public endpoints for team form, H2H, and rest days. " +
   "Caches: form 6h, H2H 7d, intangibles 1h.";
-
-const applyOrder = (
-  current: OddsProviderId[],
-  slot: "primary" | "fallback",
-  next: OddsProviderId,
-): OddsProviderId[] => {
-  const primary = slot === "primary" ? next : current[0] ?? "odds-api-io";
-  const fallbackPool = ODDS_PROVIDER_IDS.filter((id) => id !== primary);
-  let fallback: OddsProviderId;
-  if (slot === "fallback") {
-    fallback = next === primary ? fallbackPool[0] : next;
-  } else {
-    fallback = fallbackPool.find((id) => current[1] === id) ?? fallbackPool[0];
-  }
-  return fallback && fallback !== primary ? [primary, fallback] : [primary];
-};
+const FDORG_HELP =
+  "football-data.org API key. Free tier: 10 req/min. Covers PL, LaLiga, Serie A, Bundesliga, " +
+  "Ligue 1, Eredivisie, Primeira Liga, Championship, UCL. " +
+  "When configured: main leagues load instantly via 1 API call instead of scraping SofaScore. " +
+  "Also enables cleaner H2H data for those leagues.";
 
 function FieldLabel({ text, help }: { text: string; help: string }) {
   return (
@@ -104,20 +82,24 @@ function FieldLabel({ text, help }: { text: string; help: string }) {
 }
 
 export function ProvidersCard({ settings, onUpdate }: Props) {
-  const [primary, fallback] = settings.oddsProviderOrder;
-  const fallbackOptions = ODDS_PROVIDER_IDS.filter((id) => id !== primary);
   const [booksInput, setBooksInput] = useState((settings.userBooks ?? []).join(", "));
+  const [fdorgKeyInput, setFdorgKeyInput] = useState(settings.footballDataApiKey ?? "");
+
+  useEffect(() => {
+    setFdorgKeyInput(settings.footballDataApiKey ?? "");
+  }, [settings.footballDataApiKey]);
 
   const handleBooksBlur = () => {
     const books = booksInput
       .split(",")
-      .map((s) => s.trim().toLowerCase())
+      .map((s) => s.trim())
       .filter(Boolean);
     void onUpdate({ userBooks: books });
   };
 
-  const updateOrder = (slot: "primary" | "fallback", value: OddsProviderId) =>
-    void onUpdate({ oddsProviderOrder: applyOrder(settings.oddsProviderOrder, slot, value) });
+  const handleFdorgKeyBlur = () => {
+    void onUpdate({ footballDataApiKey: fdorgKeyInput.trim() || null });
+  };
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -135,55 +117,35 @@ export function ProvidersCard({ settings, onUpdate }: Props) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
-            <FieldLabel text="Odds primary" help={ODDS_PRIMARY_HELP} />
-            <Select
-              value={primary}
-              onValueChange={(v) => updateOrder("primary", v as OddsProviderId)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ODDS_PROVIDER_IDS.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {ODDS_PROVIDER_LABEL[id]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <FieldLabel text="Odds fallback" help={ODDS_FALLBACK_HELP} />
-            <Select
-              value={fallback ?? fallbackOptions[0]}
-              onValueChange={(v) => updateOrder("fallback", v as OddsProviderId)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {fallbackOptions.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {ODDS_PROVIDER_LABEL[id]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
               Catalog provider
             </Label>
-            <Select disabled value={settings.catalogProvider}>
+            <Select disabled value={settings.footballDataApiKey ? "football-data" : "sofascore"}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="sofascore">SofaScore (scraping)</SelectItem>
+                <SelectItem value="football-data">football-data.org + SofaScore</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <FieldLabel text="football-data.org API key" help={FDORG_HELP} />
+            <Input
+              type="password"
+              placeholder="Paste API key — free at football-data.org"
+              value={fdorgKeyInput}
+              onChange={(e) => setFdorgKeyInput(e.target.value)}
+              onBlur={handleFdorgKeyBlur}
+              className="font-mono text-xs"
+            />
+            {settings.footballDataApiKey && (
+              <p className="text-xs text-emerald-500/80">
+                Configured — main leagues load via official API (fast).
+              </p>
+            )}
           </div>
 
           <div className="grid gap-2">
@@ -248,7 +210,7 @@ export function ProvidersCard({ settings, onUpdate }: Props) {
           <div className="col-span-full grid gap-2">
             <FieldLabel text="Books you operate" help={USER_BOOKS_HELP} />
             <Input
-              placeholder="pinnacle, bet365, unibet  (empty = all books)"
+              placeholder="Bet365, Sbobet, Unibet  (empty = all books)"
               value={booksInput}
               onChange={(e) => setBooksInput(e.target.value)}
               onBlur={handleBooksBlur}

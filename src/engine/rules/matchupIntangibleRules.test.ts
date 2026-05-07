@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { H2H, Intangibles, TeamForm } from "@/domain/history";
 import { MatchId, TeamId } from "@/domain/ids";
 import { makeCtx, ml1x2Snapshot } from "@/test/builders/makeCtx";
@@ -43,13 +43,13 @@ const makeIntangibles = (homeRestDays?: number, awayRestDays?: number): Intangib
 });
 
 describe("form-divergence rule", () => {
-  it("fires SUPPORT for the in-form home side when PPG gap ≥ 0.5", () => {
+  it("fires SUPPORT for the in-form home side when PPG gap â‰¥ 0.5", () => {
     const ctx = makeCtx({
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       homeForm: makeForm("home", 2.4),
       awayForm: makeForm("away", 1.0),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const home = plays.find((p) => p.selection.side === "home");
     const entry = home?.trace.find((e) => e.id === "form-divergence");
     expect(entry?.verdict).toBe("SUPPORT");
@@ -61,7 +61,7 @@ describe("form-divergence rule", () => {
       homeForm: makeForm("home", 1.8),
       awayForm: makeForm("away", 1.5),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "form-divergence")).toBeUndefined();
     }
@@ -71,7 +71,7 @@ describe("form-divergence rule", () => {
     const ctx = makeCtx({
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "form-divergence")).toBeUndefined();
     }
@@ -79,12 +79,12 @@ describe("form-divergence rule", () => {
 });
 
 describe("h2h-dominance rule", () => {
-  it("fires SUPPORT for dominant home side with ≥4 meetings and ≥40pt gap", () => {
+  it("fires SUPPORT for dominant home side with â‰¥4 meetings and â‰¥40pt gap", () => {
     const ctx = makeCtx({
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       h2h: makeH2H(4, 1, 0),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const home = plays.find((p) => p.selection.side === "home");
     const entry = home?.trace.find((e) => e.id === "h2h-dominance");
     expect(entry?.verdict).toBe("SUPPORT");
@@ -95,7 +95,7 @@ describe("h2h-dominance rule", () => {
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       h2h: makeH2H(2, 0, 0),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "h2h-dominance")).toBeUndefined();
     }
@@ -106,7 +106,7 @@ describe("h2h-dominance rule", () => {
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       h2h: makeH2H(2, 2, 2),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "h2h-dominance")).toBeUndefined();
     }
@@ -114,12 +114,12 @@ describe("h2h-dominance rule", () => {
 });
 
 describe("rest-congestion rule", () => {
-  it("fires SUPPORT for the fresher home side when rest delta ≥ 2 days", () => {
+  it("fires SUPPORT for the fresher home side when rest delta â‰¥ 2 days", () => {
     const ctx = makeCtx({
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       intangibles: makeIntangibles(6, 3),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const home = plays.find((p) => p.selection.side === "home");
     const entry = home?.trace.find((e) => e.id === "rest-congestion");
     expect(entry?.verdict).toBe("SUPPORT");
@@ -130,7 +130,7 @@ describe("rest-congestion rule", () => {
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       intangibles: makeIntangibles(4, 3),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "rest-congestion")).toBeUndefined();
     }
@@ -141,9 +141,10 @@ describe("rest-congestion rule", () => {
       lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
       intangibles: makeIntangibles(undefined, undefined),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(p.trace.find((e) => e.id === "rest-congestion")).toBeUndefined();
     }
   });
 });
+

@@ -1,13 +1,20 @@
 import { PlayId } from "@/domain/ids";
-import type { PlayCandidate, Verdict } from "@/domain/play";
+import type { ComboPlay, PlayCandidate, Verdict } from "@/domain/play";
+import { DEFAULT_COMBO_POLICY } from "@/domain/strategy";
 import type { ReasoningEntry } from "@/domain/trace";
 import type { AnalysisContext } from "./context";
 import { combine, type BondedMeta } from "./combine";
+import { enumerateCombos } from "./combos";
 import { clamp, edgePct } from "./ev";
 import { MARKET_ADAPTERS } from "./markets";
 import { RULES } from "./rules";
 import { sizeStakeUnits } from "./stake";
 import type { MarketAdapter, Rule, RuleOutput } from "./types";
+
+export interface BondedAnalysisResult {
+  candidates: PlayCandidate[];
+  combos: ComboPlay[];
+}
 
 const uid = (): string =>
   (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -36,7 +43,7 @@ const outputToEntry = (o: RuleOutput): ReasoningEntry => ({
   verdict: o.verdict,
   weight: o.weight,
   message: o.message,
-  data: o.data,
+  data: o.data ? { ...o.data, leg: o.leg } : { leg: o.leg },
 });
 
 export interface RunOptions {
@@ -46,7 +53,7 @@ export interface RunOptions {
 export const runBondedAnalysis = (
   ctx: AnalysisContext,
   opts: RunOptions = {},
-): PlayCandidate[] => {
+): BondedAnalysisResult => {
   const strategy = ctx.strategy;
   const ruleConfigs = new Map(strategy.rules.map((r) => [r.ruleId, r]));
   const activeRules = RULES.filter((r) => {
@@ -174,5 +181,9 @@ export const runBondedAnalysis = (
   }
 
   candidates.sort((a, b) => b.edgePct * b.confidence - a.edgePct * a.confidence);
-  return candidates;
+
+  const comboPolicy = ctx.strategy.comboPolicy ?? DEFAULT_COMBO_POLICY;
+  const combos = enumerateCombos(candidates, comboPolicy, ctx.generatedAt);
+
+  return { candidates, combos };
 };

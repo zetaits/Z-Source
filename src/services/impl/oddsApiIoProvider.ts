@@ -12,78 +12,71 @@ import type {
 
 const IO_BASE = "https://api.odds-api.io/v3";
 
-/**
- * Mapping from our MarketKey to the API's market key. odds-api.io is not
- * officially documented at the soccer-market-key level; the names below are
- * the most plausible based on how peer APIs (the-odds-api v4) spell them and
- * will be re-tuned once we have real fixtures in dev. `parseMarketKey` below
- * is permissive so unknown aliases do not throw, they just log and skip.
- */
+// Actual market name strings returned by odds-api.io (PascalCase)
 const MARKET_TO_API: Partial<Record<MarketKey, string[]>> = {
-  ML_1X2: ["h2h", "moneyline", "1x2"],
-  AH: ["spreads", "handicap", "asian_handicap", "ah"],
-  OU_GOALS: ["totals", "ou", "over_under", "goals_over_under"],
-  BTTS: ["btts", "both_teams_to_score"],
-  DNB: ["draw_no_bet", "dnb"],
+  ML_1X2: ["ML", "1X2", "Moneyline", "H2H"],
+  AH:     ["Spread", "Asian Handicap", "AH", "Handicap"],
+  OU_GOALS: ["Totals", "Goals Over/Under", "Goals O/U", "Over/Under", "Total"],
+  BTTS:   ["BTTS", "Both Teams To Score"],
+  DNB:    ["DNB", "Draw No Bet"],
 };
 
-const ioOutcomeSchema = z
+const oddsNum = z
+  .union([z.number(), z.string().transform((s) => parseFloat(s))])
+  .optional();
+
+// Each odds row inside a market (one row per line value)
+const ioOddsRowSchema = z
   .object({
-    name: z.string(),
-    price: z.number(),
-    point: z.number().optional(),
-    line: z.number().optional(),
+    home:  oddsNum,
+    away:  oddsNum,
+    draw:  oddsNum,
+    over:  oddsNum,
+    under: oddsNum,
+    yes:   oddsNum,
+    no:    oddsNum,
+    hdp:   oddsNum,
+    line:  oddsNum,
   })
   .passthrough();
 
+// MultiMarketDto: { name, odds: OddsRow[], updatedAt? }
 const ioMarketSchema = z
   .object({
-    key: z.string(),
-    outcomes: z.array(ioOutcomeSchema),
-    last_update: z.string().optional(),
-    lastUpdate: z.string().optional(),
+    name:      z.string(),
+    odds:      z.array(ioOddsRowSchema).optional(),
+    updatedAt: z.string().optional(),
   })
   .passthrough();
 
-const ioBookmakerSchema = z
-  .object({
-    key: z.string(),
-    title: z.string().optional(),
-    markets: z.array(ioMarketSchema),
-    last_update: z.string().optional(),
-    lastUpdate: z.string().optional(),
-  })
-  .passthrough();
-
+// bookmakers is an object keyed by bookmaker slug → array of market rows
 const ioEventOddsSchema = z
   .object({
-    id: z.string().optional(),
-    eventId: z.string().optional(),
-    home_team: z.string().optional(),
-    away_team: z.string().optional(),
-    home: z.string().optional(),
-    away: z.string().optional(),
-    homeTeam: z.string().optional(),
-    awayTeam: z.string().optional(),
-    bookmakers: z.array(ioBookmakerSchema).optional(),
-    commence_time: z.string().optional(),
-    startTime: z.string().optional(),
+    id:         z.union([z.string(), z.number()]).optional(),
+    home:       z.string().optional(),
+    away:       z.string().optional(),
+    date:       z.string().optional(),
+    bookmakers: z.record(z.string(), z.array(ioMarketSchema)).optional(),
+  })
+  .passthrough();
+
+const ioLeagueSchema = z
+  .object({
+    name: z.string().optional(),
+    slug: z.string().optional(),
   })
   .passthrough();
 
 const ioEventListItemSchema = z
   .object({
-    id: z.string().optional(),
-    eventId: z.string().optional(),
-    home_team: z.string().optional(),
-    away_team: z.string().optional(),
-    home: z.string().optional(),
-    away: z.string().optional(),
-    homeTeam: z.string().optional(),
-    awayTeam: z.string().optional(),
-    commence_time: z.string().optional(),
-    startTime: z.string().optional(),
-    kickoffAt: z.string().optional(),
+    id:     z.union([z.string(), z.number()]).optional(),
+    home:   z.string().optional(),
+    away:   z.string().optional(),
+    homeId: z.union([z.string(), z.number()]).optional(),
+    awayId: z.union([z.string(), z.number()]).optional(),
+    date:   z.string().optional(),
+    league: ioLeagueSchema.optional(),
+    status: z.string().optional(),
   })
   .passthrough();
 
@@ -100,99 +93,65 @@ const parseOddsApiIoError = (body: string): string | null => {
   return null;
 };
 
-const resolveMarketKey = (apiKey: string): MarketKey | null => {
-  const lower = apiKey.toLowerCase();
-  for (const [ourKey, aliases] of Object.entries(MARKET_TO_API) as [
-    MarketKey,
-    string[],
-  ][]) {
-    if (aliases.includes(lower)) return ourKey;
+const ALIAS_TO_MARKET: Map<string, MarketKey> = (() => {
+  const m = new Map<string, MarketKey>();
+  for (const [ourKey, aliases] of Object.entries(MARKET_TO_API) as [MarketKey, string[]][]) {
+    for (const a of aliases) m.set(a.toLowerCase(), ourKey);
   }
-  return null;
-};
+  return m;
+})();
 
-const toSelection = (
-  marketKey: MarketKey,
-  outcomeName: string,
-  line: number | undefined,
-  homeName: string,
-  awayName: string,
-): Selection | null => {
-  const lower = outcomeName.toLowerCase();
-  switch (marketKey) {
-    case "ML_1X2":
-    case "DNB": {
-      if (outcomeName === homeName || lower === "home" || lower === "1") return { marketKey, side: "home" };
-      if (outcomeName === awayName || lower === "away" || lower === "2") return { marketKey, side: "away" };
-      if (lower === "draw" || lower === "x") return { marketKey, side: "draw" };
-      return null;
-    }
-    case "AH": {
-      const side =
-        outcomeName === homeName || lower === "home" ? "home"
-        : outcomeName === awayName || lower === "away" ? "away"
-        : null;
-      if (!side || line === undefined) return null;
-      return { marketKey, side, line };
-    }
-    case "OU_GOALS": {
-      if (line === undefined) return null;
-      if (lower === "over") return { marketKey, side: "over", line };
-      if (lower === "under") return { marketKey, side: "under", line };
-      return null;
-    }
-    case "BTTS": {
-      if (lower === "yes") return { marketKey, side: "yes" };
-      if (lower === "no") return { marketKey, side: "no" };
-      return null;
-    }
-    default:
-      return null;
-  }
-};
-
-const pickString = (...values: (string | undefined)[]): string => {
-  for (const v of values) if (v) return v;
-  return "";
-};
+const resolveMarketKey = (apiName: string): MarketKey | null =>
+  ALIAS_TO_MARKET.get(apiName.toLowerCase()) ?? null;
 
 type IoEvent = z.infer<typeof ioEventOddsSchema>;
 
-const buildSnapshots = (
-  event: IoEvent,
-  requested: MarketKey[],
-): LineSnapshot[] => {
-  const matchId = (event.eventId ?? event.id ?? "") as MatchId;
+const buildSnapshots = (event: IoEvent, requested: MarketKey[]): LineSnapshot[] => {
+  const matchId = String(event.id ?? "") as MatchId;
   if (!matchId) return [];
   const requestedSet = new Set(requested);
-  const homeName = pickString(event.home_team, event.home, event.homeTeam);
-  const awayName = pickString(event.away_team, event.away, event.awayTeam);
   const takenAt = new Date().toISOString();
   const snapshots = new Map<MarketKey, LineSnapshot>();
 
-  for (const bookmaker of event.bookmakers ?? []) {
-    for (const market of bookmaker.markets) {
-      const ourKey = resolveMarketKey(market.key);
+  for (const [bookKey, markets] of Object.entries(event.bookmakers ?? {})) {
+    for (const market of markets) {
+      const ourKey = resolveMarketKey(market.name);
       if (!ourKey || !requestedSet.has(ourKey)) continue;
+
       const snap = snapshots.get(ourKey) ?? {
         matchId,
         marketKey: ourKey,
-        offers: [],
+        offers: [] as BookOffer[],
         takenAt,
       };
-      for (const outcome of market.outcomes) {
-        const line = outcome.point ?? outcome.line;
-        const sel = toSelection(ourKey, outcome.name, line, homeName, awayName);
-        if (!sel) continue;
-        const offer: BookOffer = {
-          book: BookId(bookmaker.key),
-          selection: sel,
-          decimal: outcome.price,
-          takenAt: market.last_update ?? market.lastUpdate ?? bookmaker.last_update ?? bookmaker.lastUpdate ?? takenAt,
-        };
-        snap.offers.push(offer);
+
+      const book = BookId(bookKey);
+      const rowTs = market.updatedAt ?? takenAt;
+
+      const push = (sel: Selection, price: number) =>
+        snap.offers.push({ book, selection: sel, decimal: price, takenAt: rowTs });
+
+      for (const row of market.odds ?? []) {
+        const line = row.hdp ?? row.line;
+
+        if (ourKey === "ML_1X2" || ourKey === "DNB") {
+          if (row.home  !== undefined) push({ marketKey: ourKey, side: "home" }, row.home);
+          if (row.away  !== undefined) push({ marketKey: ourKey, side: "away" }, row.away);
+          if (ourKey === "ML_1X2" && row.draw !== undefined)
+            push({ marketKey: ourKey, side: "draw" }, row.draw);
+        } else if (ourKey === "AH" && line !== undefined) {
+          if (row.home !== undefined) push({ marketKey: ourKey, side: "home", line }, row.home);
+          if (row.away !== undefined) push({ marketKey: ourKey, side: "away", line }, row.away);
+        } else if (ourKey === "OU_GOALS" && line !== undefined) {
+          if (row.over  !== undefined) push({ marketKey: ourKey, side: "over",  line }, row.over);
+          if (row.under !== undefined) push({ marketKey: ourKey, side: "under", line }, row.under);
+        } else if (ourKey === "BTTS") {
+          if (row.yes !== undefined) push({ marketKey: ourKey, side: "yes" }, row.yes);
+          if (row.no  !== undefined) push({ marketKey: ourKey, side: "no"  }, row.no);
+        }
       }
-      snapshots.set(ourKey, snap);
+
+      if (snap.offers.length > 0) snapshots.set(ourKey, snap);
     }
   }
 
@@ -201,11 +160,36 @@ const buildSnapshots = (
 
 export interface OddsApiIoConfig {
   apiKey: string;
-  /** Comma-separated bookmaker keys. Free tier = 2. */
+  /** Comma-separated bookmaker keys. Free tier supports 2. */
   bookmakers?: string[];
-  /** Sport slug. For soccer the odds-api.io slug is 'football'. */
+  /** Sport slug — default 'football'. */
   sportSlug?: string;
 }
+
+// Canonical display names odds-api.io expects. Lowercase key → API form.
+// Multi-word books need explicit entries; single-word fall through capitalize-first.
+const BOOK_DISPLAY_NAMES: Record<string, string> = {
+  bet365: "Bet365",
+  pinnacle: "Pinnacle",
+  betfair: "Betfair",
+  draftkings: "DraftKings",
+  fanduel: "FanDuel",
+  betmgm: "BetMGM",
+  caesars: "Caesars",
+  pointsbet: "PointsBet",
+  unibet: "Unibet",
+  williamhill: "William Hill",
+  "william hill": "William Hill",
+  bovada: "Bovada",
+  betonline: "BetOnline",
+  betrivers: "BetRivers",
+  betway: "Betway",
+};
+
+const normalizeBook = (b: string): string => {
+  const key = b.toLowerCase().trim();
+  return BOOK_DISPLAY_NAMES[key] ?? b.charAt(0).toUpperCase() + b.slice(1);
+};
 
 export const createOddsApiIoProvider = (
   configRef: () => OddsApiIoConfig | null,
@@ -222,19 +206,20 @@ export const createOddsApiIoProvider = (
   const fetchEventOdds = async (
     matchId: MatchId,
     markets: MarketKey[],
+    signal?: AbortSignal,
   ): Promise<LineSnapshot[]> => {
     const config = configRef();
     if (!config?.apiKey) throw new Error("odds-api.io key not configured");
-    const apiMarkets = markets
-      .map((m) => MARKET_TO_API[m]?.[0])
-      .filter((m): m is string => Boolean(m));
-    if (!apiMarkets.length) return [];
+
+    const bookmakersParam =
+      config.bookmakers && config.bookmakers.length > 0
+        ? config.bookmakers.map(normalizeBook).join(",")
+        : undefined; // omit param → API returns all available bookmakers
 
     const url = `${IO_BASE}/odds${buildQuery({
-      eventId: matchId,
-      apiKey: config.apiKey,
-      bookmakers: config.bookmakers?.join(","),
-      markets: apiMarkets.join(","),
+      eventId:    matchId,
+      apiKey:     config.apiKey,
+      bookmakers: bookmakersParam,
     })}`;
 
     try {
@@ -242,6 +227,7 @@ export const createOddsApiIoProvider = (
         url,
         rps: 0.5,
         headers: { Accept: "application/json" },
+        signal,
       });
       oddsApiIoQuota.observeHeaders(res.headers);
       oddsApiIoQuota.recordRequest();
@@ -254,31 +240,27 @@ export const createOddsApiIoProvider = (
       return buildSnapshots(parsed.data, markets);
     } catch (err) {
       if (err instanceof HttpError) {
-        if (err.status === 401 || err.status === 403) {
+        if (err.status === 401 || err.status === 403)
           throw new Error("odds-api.io rejected the API key (401/403)");
-        }
-        if (err.status === 429) throw new Error("odds-api.io rate limit reached (429)");
+        if (err.status === 429)
+          throw new Error("odds-api.io rate limit reached (429)");
         if (err.status === 422 || err.status === 400) {
           const hint = parseOddsApiIoError(err.body);
-          throw new Error(
-            `odds-api.io rejected the request (${err.status})${hint ? `: ${hint}` : ""}.`,
-          );
+          throw new Error(`odds-api.io rejected the request (${err.status})${hint ? `: ${hint}` : ""}.`);
         }
       }
       throw err;
     }
   };
 
-  const listEvents = async (sportKey: string): Promise<ProviderEvent[]> => {
+  const listEvents = async (_sportKey: string, signal?: AbortSignal): Promise<ProviderEvent[]> => {
     const config = configRef();
     if (!config?.apiKey) throw new Error("odds-api.io key not configured");
     const sport = config.sportSlug ?? "football";
-    // sportKey (league-level) is used as an optional filter; odds-api.io
-    // typically scopes by sport + optional league slug.
+
     const url = `${IO_BASE}/events${buildQuery({
       sport,
       apiKey: config.apiKey,
-      league: sportKey,
     })}`;
 
     try {
@@ -286,6 +268,7 @@ export const createOddsApiIoProvider = (
         url,
         rps: 0.5,
         headers: { Accept: "application/json" },
+        signal,
       });
       oddsApiIoQuota.observeHeaders(res.headers);
       oddsApiIoQuota.recordRequest();
@@ -295,22 +278,23 @@ export const createOddsApiIoProvider = (
         console.warn("[odds-api.io] events list zod parse failed", parsed.error.issues.slice(0, 3));
         return [];
       }
+
       return parsed.data
         .map((ev) => {
-          const eventId = ev.eventId ?? ev.id;
-          const homeName = pickString(ev.home_team, ev.home, ev.homeTeam);
-          const awayName = pickString(ev.away_team, ev.away, ev.awayTeam);
-          const kickoffAt = pickString(ev.commence_time, ev.startTime, ev.kickoffAt);
+          const eventId = ev.id !== undefined ? String(ev.id) : undefined;
+          const homeName = ev.home ?? "";
+          const awayName = ev.away ?? "";
+          const kickoffAt = ev.date ?? "";
           if (!eventId || !homeName || !awayName || !kickoffAt) return null;
           return { eventId, homeName, awayName, kickoffAt };
         })
         .filter((e): e is ProviderEvent => e !== null);
     } catch (err) {
       if (err instanceof HttpError) {
-        if (err.status === 401 || err.status === 403) {
+        if (err.status === 401 || err.status === 403)
           throw new Error("odds-api.io rejected the API key (401/403)");
-        }
-        if (err.status === 429) throw new Error("odds-api.io rate limit reached (429)");
+        if (err.status === 429)
+          throw new Error("odds-api.io rate limit reached (429)");
       }
       throw err;
     }
@@ -318,11 +302,11 @@ export const createOddsApiIoProvider = (
 
   return {
     name: "odds-api-io",
-    async getOdds(matchId, markets, _context) {
-      return fetchEventOdds(matchId, markets);
+    async getOdds(matchId, markets, context) {
+      return fetchEventOdds(matchId, markets, context?.signal);
     },
-    async snapshotOpeners(matchId, _context) {
-      const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"]);
+    async snapshotOpeners(matchId, context) {
+      const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"], context?.signal);
       return snaps.map((s) => ({ ...s, isOpener: true }));
     },
     async listEvents(sportKey) {

@@ -1,6 +1,61 @@
 import { z } from "zod";
 import { SOFA_API_BASE, sofaEventSchema, type SofaEvent } from "./sofaScore.v1";
 
+export const eventStatisticsUrl = (eventId: number): string =>
+  `${SOFA_API_BASE}/event/${eventId}/statistics`;
+
+const xgValueSchema = z
+  .union([z.number(), z.string().transform(parseFloat)])
+  .nullable()
+  .optional();
+
+const sofaStatItemSchema = z
+  .object({
+    key: z.string(),
+    homeValue: xgValueSchema,
+    awayValue: xgValueSchema,
+  })
+  .passthrough();
+
+const sofaStatGroupSchema = z
+  .object({
+    statisticsItems: z.array(sofaStatItemSchema).optional(),
+  })
+  .passthrough();
+
+const sofaStatPeriodSchema = z
+  .object({
+    period: z.string(),
+    groups: z.array(sofaStatGroupSchema).optional(),
+  })
+  .passthrough();
+
+export const sofaEventStatisticsSchema = z
+  .object({ statistics: z.array(sofaStatPeriodSchema) })
+  .passthrough();
+
+export interface SofaXG {
+  homeXG: number;
+  awayXG: number;
+}
+
+export const extractXG = (
+  data: z.infer<typeof sofaEventStatisticsSchema>,
+): SofaXG | null => {
+  const period =
+    data.statistics.find((p) => p.period === "ALL") ?? data.statistics[0];
+  if (!period?.groups) return null;
+  for (const group of period.groups) {
+    const item = (group.statisticsItems ?? []).find(
+      (i) => i.key === "expectedGoals",
+    );
+    if (item && typeof item.homeValue === "number" && typeof item.awayValue === "number") {
+      return { homeXG: item.homeValue, awayXG: item.awayValue };
+    }
+  }
+  return null;
+};
+
 export const teamEventsLastUrl = (teamId: number, page = 0): string =>
   `${SOFA_API_BASE}/team/${teamId}/events/last/${page}`;
 

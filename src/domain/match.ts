@@ -36,9 +36,10 @@ export interface CatalogMatch {
   leagueName: string;
   countryCode: string;
   kickoffAt: string;
-  home: { name: string; aliases?: string[]; sofaScoreId?: number };
-  away: { name: string; aliases?: string[]; sofaScoreId?: number };
+  home: { name: string; aliases?: string[]; sofaScoreId?: number; fdorgTeamId?: number };
+  away: { name: string; aliases?: string[]; sofaScoreId?: number; fdorgTeamId?: number };
   status: MatchStatus;
+  fdorgMatchId?: number;
 }
 
 export interface CatalogMatchDetails {

@@ -1,7 +1,9 @@
 import {
+  DEFAULT_COMBO_POLICY,
   DEFAULT_LEG_CAPS,
   DEFAULT_LEG_WEIGHTS,
   DEFAULT_STAKE_POLICY,
+  type ComboPolicy,
   type LegCaps,
   type LegWeights,
   type StakePolicy,
@@ -26,6 +28,7 @@ const K_LEG_WEIGHTS = "strategy.legWeights";
 const K_LEG_CAPS = "strategy.legCaps";
 const K_MIN_LEGS_BONDED = "strategy.minLegsAlignedForBonded";
 const K_ENABLED_MARKETS = "strategy.enabledMarkets";
+const K_COMBO_POLICY = "strategy.comboPolicy";
 
 export const loadStrategy = async (): Promise<StrategyConfig> => {
   if (!isPersistentStorage()) {
@@ -34,11 +37,12 @@ export const loadStrategy = async (): Promise<StrategyConfig> => {
       legCaps: DEFAULT_LEG_CAPS,
       minLegsAlignedForBonded: 3,
       stakePolicy: DEFAULT_STAKE_POLICY,
+      comboPolicy: DEFAULT_COMBO_POLICY,
       rules: [],
       enabledMarkets: DEFAULT_ENABLED_MARKETS,
     };
   }
-  const [rules, stakePolicy, legWeights, legCaps, minLegsAlignedForBonded, enabledMarkets] =
+  const [rules, stakePolicy, legWeights, legCaps, minLegsAlignedForBonded, enabledMarkets, comboPolicy] =
     await Promise.all([
       strategyRepo.listAll(),
       settingsRepo.get<StakePolicy>(K_STAKE_POLICY),
@@ -46,12 +50,14 @@ export const loadStrategy = async (): Promise<StrategyConfig> => {
       settingsRepo.get<LegCaps>(K_LEG_CAPS),
       settingsRepo.get<number>(K_MIN_LEGS_BONDED),
       settingsRepo.get<MarketKey[]>(K_ENABLED_MARKETS),
+      settingsRepo.get<ComboPolicy>(K_COMBO_POLICY),
     ]);
   return {
     legWeights: legWeights ?? DEFAULT_LEG_WEIGHTS,
     legCaps: legCaps ?? DEFAULT_LEG_CAPS,
     minLegsAlignedForBonded: minLegsAlignedForBonded ?? 3,
     stakePolicy: stakePolicy ?? DEFAULT_STAKE_POLICY,
+    comboPolicy: comboPolicy ?? DEFAULT_COMBO_POLICY,
     rules: rules.map((r) => ({
       ruleId: r.ruleId,
       enabled: r.enabled,
@@ -64,6 +70,9 @@ export const loadStrategy = async (): Promise<StrategyConfig> => {
 
 export const saveStakePolicy = (policy: StakePolicy): Promise<void> =>
   settingsRepo.set(K_STAKE_POLICY, policy);
+
+export const saveComboPolicy = (policy: ComboPolicy): Promise<void> =>
+  settingsRepo.set(K_COMBO_POLICY, policy);
 
 export const saveLegWeights = (weights: LegWeights): Promise<void> =>
   settingsRepo.set(K_LEG_WEIGHTS, weights);

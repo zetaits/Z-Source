@@ -173,7 +173,7 @@ export function EnginePlayground() {
   const plays = useMemo(() => {
     if (!ranAt) return [];
     const ctx = SCENARIOS[scenario].build();
-    return runBondedAnalysis(ctx, { includePass });
+    return runBondedAnalysis(ctx, { includePass }).candidates;
   }, [scenario, includePass, ranAt]);
 
   return (

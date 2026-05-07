@@ -44,8 +44,9 @@ export const historyCacheRepo = {
   },
 };
 
+// v2 key includes xG data; old "form:..." entries are orphaned and evicted on TTL
 export const formCacheKey = (teamId: number, lastN: number): string =>
-  `form:${teamId}:${lastN}`;
+  `form-v2:${teamId}:${lastN}`;
 
 export const h2hCacheKey = (homeId: number, awayId: number): string => {
   const [a, b] = [homeId, awayId].sort((x, y) => x - y);
@@ -54,3 +55,6 @@ export const h2hCacheKey = (homeId: number, awayId: number): string => {
 
 export const intangiblesCacheKey = (matchId: string): string =>
   `intangibles:${matchId}`;
+
+export const eventStatsCacheKey = (eventId: number): string =>
+  `event-stats:${eventId}`;

@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,27 +15,15 @@ import {
 } from "@/features/bankroll/hooks/useBankroll";
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
-import {
-  WINDOW_FIXTURES_TTL_MS,
-  fetchWindowFixtures,
-  windowFixturesQueryKey,
-} from "@/services/catalog/windowFixtures";
+import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { resolveProviders } from "@/services/providers/factory";
 import { isPersistentStorage } from "@/storage";
 import { formatMoney, formatSignedMoney } from "@/lib/money";
 
-const useWindowFixtures = () =>
-  useQuery({
-    queryKey: windowFixturesQueryKey,
-    queryFn: fetchWindowFixtures,
-    staleTime: WINDOW_FIXTURES_TTL_MS,
-    gcTime: 30 * 60_000,
-  });
-
 export function CommandCenter() {
   const persistent = isPersistentStorage();
-  const fixtures = useWindowFixtures();
+  const fixtures = useFixturesWindow();
   const settingsQ = useBankrollSettings();
   const balanceQ = useCurrentBalance();
   const exposureQ = useOpenExposure();
@@ -46,12 +33,10 @@ export function CommandCenter() {
   const { data: appSettings } = useSettings();
 
   const upcoming = useMemo<CatalogMatch[]>(() => {
-    const data = fixtures.data ?? [];
     const now = Date.now();
-    return data
+    return fixtures.data
       .filter((m) => new Date(m.kickoffAt).getTime() >= now - 3 * 3_600_000)
       .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
-      .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))
       .slice(0, 10);
   }, [fixtures.data]);
 
@@ -97,6 +82,7 @@ export function CommandCenter() {
 
   const fixtureError = fixtures.error as Error | undefined;
   const isLoadingFixtures = fixtures.isLoading;
+  const fixtureCount = fixtures.data.length;
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-auto p-8" style={{ background: "var(--zs-bg)" }}>
@@ -111,7 +97,7 @@ export function CommandCenter() {
           <div>
             <h1 className="font-display text-[34px] leading-[1.05] text-fg">
               <span style={{ color: "var(--zs-fg)" }}>
-                {fixtures.isLoading ? "…" : (fixtures.data?.length ?? 0)}
+                {isLoadingFixtures ? "…" : fixtureCount}
               </span>{" "}
               fixtures in window
               {bookCount > 0 && (

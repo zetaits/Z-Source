@@ -77,6 +77,7 @@ const buildMlRows = (splits: AnMlSplits): SplitData[] =>
 
 const fetchActionNetwork = async (
   dateYyyyMmDd: string,
+  signal?: AbortSignal,
 ): Promise<AnGame[] | null> => {
   const url = actionNetworkPublicBettingApiUrl(dateYyyyMmDd);
   const res = await httpRequest({
@@ -84,6 +85,7 @@ const fetchActionNetwork = async (
     rps: 1,
     preferBrowserFetch: true,
     headers: { Accept: "application/json" },
+    signal,
   });
   if (res.status !== 200) {
     console.warn(`[action-network] HTTP ${res.status} · url=${url}`);
@@ -139,7 +141,7 @@ export const createActionNetworkSplitProvider = (): SplitProvider => ({
     const day = yyyyMmDdUtc(ctx.kickoffAt);
     let games: AnGame[] | null;
     try {
-      games = await fetchActionNetwork(day);
+      games = await fetchActionNetwork(day, query?.signal);
     } catch (err) {
       console.warn(`[action-network] fetch threw · ${(err as Error).message}`);
       return null;

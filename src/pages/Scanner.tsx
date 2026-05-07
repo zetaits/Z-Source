@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeagueAccordion } from "@/components/domain/LeagueAccordion";
 import { DateTabs } from "@/features/scanner/components/DateTabs";
-import { useScanner } from "@/features/scanner/hooks/useScanner";
+import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { findLeagueById } from "@/config/leagues";
+import { localDayKey } from "@/services/catalog/windowFixtures";
 import type { CatalogMatch } from "@/domain/match";
 
 interface LeagueGroup {
@@ -39,13 +40,26 @@ const groupByLeague = (matches: CatalogMatch[]): LeagueGroup[] => {
   return [...map.values()].sort((a, b) => a.leagueName.localeCompare(b.leagueName));
 };
 
+const targetLocalDayKey = (offset: number): string => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  return localDayKey(d);
+};
+
 export function Scanner() {
   const [offset, setOffset] = useState(0);
-  const window = useMemo(() => ({ date: new Date(), dayOffset: offset }), [offset]);
   const { data: settings } = useSettings();
-  const fixtures = useScanner(window);
+  const fixtures = useFixturesWindow();
 
-  const groups = useMemo(() => groupByLeague(fixtures.data ?? []), [fixtures.data]);
+  const dayMatches = useMemo<CatalogMatch[]>(() => {
+    const target = targetLocalDayKey(offset);
+    return fixtures.data.filter(
+      (m) => localDayKey(new Date(m.kickoffAt)) === target,
+    );
+  }, [fixtures.data, offset]);
+
+  const groups = useMemo(() => groupByLeague(dayMatches), [dayMatches]);
   const enabledCount = settings?.enabledLeagueIds.length ?? 0;
 
   const lastErrorRef = useRef<string | null>(null);

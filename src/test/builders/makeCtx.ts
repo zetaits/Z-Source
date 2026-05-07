@@ -4,6 +4,7 @@ import type { MarketKey, Selection } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import type { Splits } from "@/domain/splits";
 import {
+  DEFAULT_COMBO_POLICY,
   DEFAULT_LEG_CAPS,
   DEFAULT_LEG_WEIGHTS,
   DEFAULT_STAKE_POLICY,
@@ -44,6 +45,7 @@ export const defaultStrategy = (overrides: Partial<StrategyConfig> = {}): Strate
   legCaps: DEFAULT_LEG_CAPS,
   minLegsAlignedForBonded: 3,
   stakePolicy: DEFAULT_STAKE_POLICY,
+  comboPolicy: DEFAULT_COMBO_POLICY,
   rules: [],
   enabledMarkets: DEFAULT_MARKETS,
   ...overrides,

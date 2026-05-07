@@ -5,10 +5,8 @@ import { LEAGUES } from "@/config/leagues";
 
 const STORE_FILE = "z-source.settings.json";
 
-export const ODDS_PROVIDER_IDS = ["odds-api-io", "the-odds-api"] as const;
+export const ODDS_PROVIDER_IDS = ["odds-api-io"] as const;
 export type OddsProviderId = (typeof ODDS_PROVIDER_IDS)[number];
-
-const oddsProviderIdSchema = z.enum(ODDS_PROVIDER_IDS);
 
 export const SPLIT_PROVIDER_IDS = ["action-network"] as const;
 export type SplitProviderId = (typeof SPLIT_PROVIDER_IDS)[number];
@@ -17,12 +15,11 @@ export const HISTORY_PROVIDER_IDS = ["sofascore"] as const;
 export type HistoryProviderId = (typeof HISTORY_PROVIDER_IDS)[number];
 
 const settingsSchema = z.object({
-  oddsApiKey: z.string().nullable(),
   oddsApiIoKey: z.string().nullable(),
+  footballDataApiKey: z.string().nullable(),
   enabledLeagueIds: z.array(z.string()),
   catalogProvider: z.literal("sofascore"),
   oddsRegion: z.enum(["us", "uk", "eu", "au"]),
-  oddsProviderOrder: z.array(oddsProviderIdSchema).min(1),
   splitProviderId: z.enum(SPLIT_PROVIDER_IDS),
   historyProviderId: z.enum(HISTORY_PROVIDER_IDS),
   userBooks: z.array(z.string()),
@@ -30,15 +27,12 @@ const settingsSchema = z.object({
 
 export type AppSettings = z.infer<typeof settingsSchema>;
 
-const DEFAULT_ODDS_ORDER: OddsProviderId[] = ["odds-api-io", "the-odds-api"];
-
 const defaults = (): AppSettings => ({
-  oddsApiKey: null,
   oddsApiIoKey: null,
+  footballDataApiKey: null,
   enabledLeagueIds: LEAGUES.filter((l) => l.defaultEnabled).map((l) => String(l.id)),
   catalogProvider: "sofascore",
   oddsRegion: "eu",
-  oddsProviderOrder: [...DEFAULT_ODDS_ORDER],
   splitProviderId: "action-network",
   historyProviderId: "sofascore",
   userBooks: [],

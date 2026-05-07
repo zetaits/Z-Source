@@ -13,24 +13,24 @@ import { runBondedAnalysis } from "./pipeline";
 describe("runBondedAnalysis", () => {
   it("returns no plays when no lines available", () => {
     const ctx = makeCtx();
-    expect(runBondedAnalysis(ctx)).toEqual([]);
+    expect(runBondedAnalysis(ctx).candidates).toEqual([]);
   });
 
   it("filters PASS plays by default", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(2.1, 3.4, 4) } });
-    const plays = runBondedAnalysis(ctx);
+    const { candidates: plays } = runBondedAnalysis(ctx);
     for (const p of plays) expect(p.verdict).not.toBe("PASS");
   });
 
   it("includes PASS plays when requested", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(1.5, 4.5, 8) } });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     expect(plays.length).toBeGreaterThanOrEqual(3);
   });
 
   it("generates a PlayCandidate with trace on positive edge", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(2.2, 3.9, 4.2) } });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const draw = plays.find((p) => p.selection.side === "draw");
     expect(draw).toBeDefined();
     expect(draw!.trace.length).toBeGreaterThan(1);
@@ -39,14 +39,14 @@ describe("runBondedAnalysis", () => {
 
   it("draw-value-375 fires on draws priced ≥ 3.75", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(2.0, 3.9, 4.1) } });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const draw = plays.find((p) => p.selection.side === "draw");
     expect(draw?.trace.some((e) => e.id === "draw-value-375")).toBe(true);
   });
 
   it("draw-value-375 does not fire when draw priced below 3.75", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(2.0, 3.4, 4.1) } });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const draw = plays.find((p) => p.selection.side === "draw");
     expect(draw?.trace.some((e) => e.id === "draw-value-375")).toBe(false);
   });
@@ -69,7 +69,7 @@ describe("runBondedAnalysis", () => {
       openers: { ML_1X2: opener },
       splits: { ML_1X2: splits },
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const home = plays.find((p) => selectionKey(p.selection) === "ML_1X2:home");
     const entry = home?.trace.find((e) => e.id === "sharp-square-detector");
     expect(entry?.verdict).toBe("SUPPORT");
@@ -81,13 +81,13 @@ describe("runBondedAnalysis", () => {
       lines: { ML_1X2: ml1x2Snapshot(2, 3.4, 4), OU_GOALS: ouGoalsSnapshot(2.5, 1.9, 1.9) },
       strategy: defaultStrategy({ enabledMarkets: ["ML_1X2"] }),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     expect(plays.every((p) => p.selection.marketKey === "ML_1X2")).toBe(true);
   });
 
   it("stakeUnits is 0 when edge below threshold", () => {
     const ctx = makeCtx({ lines: { ML_1X2: ml1x2Snapshot(1.5, 4.5, 8) } });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       if (p.edgePct < ctx.strategy.stakePolicy.minEdgePct) {
         expect(p.stakeUnits).toBe(0);
@@ -102,7 +102,7 @@ describe("runBondedAnalysis", () => {
         OU_GOALS: ouGoalsSnapshot(2.5, 1.95, 1.95),
       },
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (let i = 1; i < plays.length; i++) {
       const scoreA = plays[i - 1].edgePct * plays[i - 1].confidence;
       const scoreB = plays[i].edgePct * plays[i].confidence;
@@ -117,7 +117,7 @@ describe("runBondedAnalysis", () => {
         rules: [{ ruleId: "draw-value-375", enabled: false, weight: 1 }],
       }),
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     const draw = plays.find((p) => p.selection.side === "draw");
     expect(draw?.trace.some((e) => e.id === "draw-value-375")).toBe(false);
   });
@@ -132,7 +132,7 @@ describe("runBondedAnalysis", () => {
         ]),
       },
     });
-    const plays = runBondedAnalysis(ctx, { includePass: true });
+    const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
     for (const p of plays) {
       expect(["LEAN", "PLAY", "STRONG", "PASS"]).toContain(p.verdict);
     }

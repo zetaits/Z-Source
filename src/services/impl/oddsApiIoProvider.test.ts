@@ -50,7 +50,11 @@ const loadHttp = async () => {
 
 const loadProvider = async () => {
   const { createOddsApiIoProvider } = await import("./oddsApiIoProvider");
-  return createOddsApiIoProvider(() => ({ apiKey: "test-key", sportSlug: "football" }));
+  return createOddsApiIoProvider(() => ({
+    apiKey: "test-key",
+    sportSlug: "football",
+    bookmakers: ["bet365", "sbobet"],
+  }));
 };
 
 beforeEach(async () => {
@@ -61,34 +65,140 @@ describe("createOddsApiIoProvider", () => {
   it("maps ML_1X2 outcomes into selections", async () => {
     (await loadHttp()).mockResolvedValue(
       mockResponse({
-        id: "evt-1",
-        home_team: "Arsenal",
-        away_team: "Chelsea",
-        bookmakers: [
-          {
-            key: "pinnacle",
-            title: "Pinnacle",
-            last_update: "2026-04-17T12:00:00Z",
-            markets: [
-              {
-                key: "h2h",
-                outcomes: [
-                  { name: "Arsenal", price: 2.1 },
-                  { name: "Draw", price: 3.5 },
-                  { name: "Chelsea", price: 3.8 },
-                ],
-              },
-            ],
-          },
-        ],
+        id: 12345,
+        home: "Arsenal",
+        away: "Chelsea",
+        date: "2026-04-17T15:00:00Z",
+        bookmakers: {
+          Bet365: [
+            { name: "ML", odds: [{ home: 2.1, draw: 3.5, away: 3.8 }], updatedAt: "2026-04-17T14:00:00Z" },
+          ],
+          Sbobet: [
+            { name: "ML", odds: [{ home: 2.05, draw: 3.6, away: 3.75 }], updatedAt: "2026-04-17T14:00:00Z" },
+          ],
+        },
       }),
     );
 
     const provider = await loadProvider();
-    const snaps = await provider.getOdds("evt-1" as MatchId, ["ML_1X2"]);
+    const snaps = await provider.getOdds("12345" as MatchId, ["ML_1X2"]);
     expect(snaps).toHaveLength(1);
     const sides = snaps[0].offers.map((o) => o.selection.side).sort();
-    expect(sides).toEqual(["away", "draw", "home"]);
+    expect(sides).toEqual(["away", "away", "draw", "draw", "home", "home"]);
+  });
+
+  it("maps OU_GOALS outcomes into over/under selections", async () => {
+    (await loadHttp()).mockResolvedValue(
+      mockResponse({
+        id: 12345,
+        home: "Arsenal",
+        away: "Chelsea",
+        date: "2026-04-17T15:00:00Z",
+        bookmakers: {
+          Bet365: [
+            { name: "Totals", odds: [{ hdp: 2.5, over: 1.85, under: 1.95 }], updatedAt: "2026-04-17T14:00:00Z" },
+          ],
+        },
+      }),
+    );
+
+    const provider = await loadProvider();
+    const snaps = await provider.getOdds("12345" as MatchId, ["OU_GOALS"]);
+    expect(snaps).toHaveLength(1);
+    const sides = snaps[0].offers.map((o) => o.selection.side).sort();
+    expect(sides).toEqual(["over", "under"]);
+    const overOffer = snaps[0].offers.find((o) => o.selection.side === "over");
+    expect((overOffer?.selection as { line?: number }).line).toBe(2.5);
+  });
+
+  it("maps BTTS yes/no fields into selections", async () => {
+    (await loadHttp()).mockResolvedValue(
+      mockResponse({
+        id: 12345,
+        home: "Bayern Munich",
+        away: "Paris Saint-Germain",
+        date: "2026-05-06T19:00:00Z",
+        bookmakers: {
+          Bet365: [
+            { name: "Both Teams To Score", odds: [{ yes: "1.300", no: "3.400" }], updatedAt: "2026-05-06T15:03:19.866Z" },
+          ],
+        },
+      }),
+    );
+
+    const provider = await loadProvider();
+    const snaps = await provider.getOdds("12345" as MatchId, ["BTTS"]);
+    expect(snaps).toHaveLength(1);
+    const sides = snaps[0].offers.map((o) => o.selection.side).sort();
+    expect(sides).toEqual(["no", "yes"]);
+    const yesOffer = snaps[0].offers.find((o) => o.selection.side === "yes");
+    expect(yesOffer?.decimal).toBe(1.3);
+  });
+
+  it("maps Goals Over/Under name to OU_GOALS", async () => {
+    (await loadHttp()).mockResolvedValue(
+      mockResponse({
+        id: 12345,
+        home: "Bayern Munich",
+        away: "Paris Saint-Germain",
+        date: "2026-05-06T19:00:00Z",
+        bookmakers: {
+          Bet365: [
+            { name: "Goals Over/Under", odds: [{ hdp: 2.5, over: "1.222", under: "4.333" }], updatedAt: "2026-05-06T15:03:19.866Z" },
+          ],
+        },
+      }),
+    );
+
+    const provider = await loadProvider();
+    const snaps = await provider.getOdds("12345" as MatchId, ["OU_GOALS"]);
+    expect(snaps).toHaveLength(1);
+    const sides = snaps[0].offers.map((o) => o.selection.side).sort();
+    expect(sides).toEqual(["over", "under"]);
+  });
+
+  it("maps listEvents using id/home/away/date fields", async () => {
+    (await loadHttp()).mockResolvedValue(
+      mockResponse([
+        {
+          id: 99,
+          home: "Real Madrid",
+          away: "Barcelona",
+          date: "2026-05-10T20:00:00Z",
+        },
+        {
+          id: 100,
+          home: "Atletico",
+          away: "Sevilla",
+          date: "2026-05-10T18:00:00Z",
+        },
+      ]),
+    );
+
+    const provider = await loadProvider();
+    const events = await provider.listEvents("football");
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      eventId: "99",
+      homeName: "Real Madrid",
+      awayName: "Barcelona",
+      kickoffAt: "2026-05-10T20:00:00Z",
+    });
+  });
+
+  it("filters out listEvents entries missing required fields", async () => {
+    (await loadHttp()).mockResolvedValue(
+      mockResponse([
+        { id: 1, home: "Arsenal", away: "Chelsea" }, // missing date
+        { home: "Liverpool", away: "City", date: "2026-05-10T20:00:00Z" }, // missing id
+        { id: 3, home: "PSG", away: "Lyon", date: "2026-05-11T20:00:00Z" }, // valid
+      ]),
+    );
+
+    const provider = await loadProvider();
+    const events = await provider.listEvents("football");
+    expect(events).toHaveLength(1);
+    expect(events[0].eventId).toBe("3");
   });
 
   it("throws configured message on 401", async () => {
@@ -108,7 +218,7 @@ describe("createOddsApiIoProvider", () => {
   });
 
   it("returns empty array when zod parse fails", async () => {
-    (await loadHttp()).mockResolvedValue(mockResponse({ not: "expected" }));
+    (await loadHttp()).mockResolvedValue(mockResponse("not-an-object"));
     const provider = await loadProvider();
     const snaps = await provider.getOdds("evt" as MatchId, ["ML_1X2"]);
     expect(snaps).toEqual([]);

@@ -4,6 +4,7 @@ import { DataCard } from "@/features/settings/components/DataCard";
 import { LeaguesPicker } from "@/features/settings/components/LeaguesPicker";
 import { OddsApiKeyCard } from "@/features/settings/components/OddsApiKeyCard";
 import { ProvidersCard } from "@/features/settings/components/ProvidersCard";
+import { StrategyCard } from "@/features/settings/components/StrategyCard";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 
 export function Settings() {
@@ -29,6 +30,7 @@ export function Settings() {
           <OddsApiKeyCard settings={data} onUpdate={update} />
           <ProvidersCard settings={data} onUpdate={update} />
           <LeaguesPicker settings={data} onUpdate={update} />
+          <StrategyCard />
           <DataCard />
           <CacheResetCard />
         </div>

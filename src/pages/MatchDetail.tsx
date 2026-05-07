@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { MatchId } from "@/domain/ids";
-import type { PlayCandidate } from "@/domain/play";
+import type { ComboPlay, PlayCandidate } from "@/domain/play";
 import type { BetEntryPrefill } from "@/features/bankroll/components/BetEntryDialog";
 import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
 import { useBankrollSettings } from "@/features/bankroll/hooks/useBankroll";
@@ -17,6 +17,7 @@ import { TrendsTab } from "@/features/match-detail/components/TrendsTab";
 import { SplitsTab } from "@/features/match-detail/components/SplitsTab";
 import { SentimentTab } from "@/features/match-detail/components/SentimentTab";
 import { IntangiblesTab } from "@/features/match-detail/components/IntangiblesTab";
+import { ComboPlayCard } from "@/components/domain/ComboPlayCard";
 import { ReasoningTrace } from "@/components/domain/ReasoningTrace";
 import { useMatch } from "@/features/match-detail/hooks/useMatch";
 import { useAnalysis } from "@/features/match-detail/hooks/useAnalysis";
@@ -101,8 +102,9 @@ export function MatchDetail() {
   }
 
   const plays = analysis.data?.plays ?? [];
-  const oddsEventId = plays[0]?.matchId ?? null;
-  const lineMatchId = oddsEventId ? MatchId(String(oddsEventId)) : null;
+  const combos = analysis.data?.combos ?? [];
+  const resolvedEventId = analysis.data?.resolution?.oddsEventId ?? null;
+  const lineMatchId = resolvedEventId ? MatchId(resolvedEventId) : null;
 
   return (
     <div className="flex h-full flex-col" style={{ background: "var(--zs-bg)" }}>
@@ -186,6 +188,7 @@ export function MatchDetail() {
         {activeTab === "picks" && (
           <PicksPaneOrEmpty
             plays={plays}
+            combos={combos}
             onLogBet={openLogBet}
             ran={Boolean(analysis.data)}
             status={analysis.data?.status ?? "idle"}
@@ -250,12 +253,14 @@ export function MatchDetail() {
 /* Picks tab with 2-pane layout when plays exist */
 function PicksPaneOrEmpty({
   plays,
+  combos,
   onLogBet,
   ran,
   status,
   message,
 }: {
   plays: PlayCandidate[];
+  combos: ComboPlay[];
   onLogBet: (play: PlayCandidate) => void;
   ran: boolean;
   status: string;
@@ -278,7 +283,7 @@ function PicksPaneOrEmpty({
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-      {/* Left: plays */}
+      {/* Left: plays + combos */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold text-fg">
@@ -304,9 +309,23 @@ function PicksPaneOrEmpty({
             />
           </div>
         ))}
+
+        {combos.length > 0 && (
+          <>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[13px] font-semibold text-fg">
+                Combos · {combos.length} {combos.length === 1 ? "anchor" : "anchors"}
+              </span>
+              <span className="kicker">corr-adjusted</span>
+            </div>
+            {combos.map((c) => (
+              <ComboPlayCard key={c.id} combo={c} />
+            ))}
+          </>
+        )}
       </div>
 
-      {/* Right: reasoning + line note */}
+      {/* Right: reasoning */}
       <div className="flex flex-col gap-4">
         {topPlay && (
           <div

@@ -18,3 +18,25 @@ export interface PlayCandidate {
   trace: ReasoningEntry[];
   generatedAt: string;
 }
+
+export interface ComboLeg {
+  selection: Selection;
+  fairProb: number;
+  priceDecimal: number;
+  baseSelectionId: PlayId;
+}
+
+export interface ComboPlay {
+  id: PlayId;
+  matchId: MatchId;
+  legs: ComboLeg[];
+  combinedDecimal: number;
+  combinedFairProb: number;
+  edgePct: number;
+  confidence: number;
+  verdict: Verdict;
+  correlationKey: string;
+  rho: number;
+  trace: ReasoningEntry[];
+  generatedAt: string;
+}

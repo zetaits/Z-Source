@@ -22,6 +22,8 @@ export const formDivergence: Rule = {
     const { homeForm, awayForm } = ctx;
     if (!homeForm || !awayForm) return null;
     if (homeForm.lastN === 0 || awayForm.lastN === 0) return null;
+    // Defer to xPointsRegression when xG data is available for both teams
+    if (homeForm.xPointsLast !== undefined && awayForm.xPointsLast !== undefined) return null;
 
     const delta = homeForm.ppgLast - awayForm.ppgLast;
     if (Math.abs(delta) < PPG_DIFF_MIN) return null;

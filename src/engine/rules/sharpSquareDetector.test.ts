@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { MatchId } from "@/domain/ids";
 import type { MarketKey } from "@/domain/market";
 import type { Splits } from "@/domain/splits";
@@ -20,7 +20,7 @@ const splitsFor = (
   })),
 });
 
-const detectorEntry = (plays: ReturnType<typeof runBondedAnalysis>, side: string) => {
+const detectorEntry = (plays: ReturnType<typeof runBondedAnalysis>["candidates"], side: string) => {
   const play = plays.find((p) => p.selection.side === side);
   return play?.trace.find((e) => e.id === "sharp-square-detector");
 };
@@ -38,7 +38,7 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const entry = detectorEntry(plays, "home");
       expect(entry?.verdict).toBe("SUPPORT");
       expect(entry?.data?.pattern).toBe("REVERSE_LINE_MOVEMENT");
@@ -55,7 +55,7 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const entry = detectorEntry(plays, "home");
       expect(entry?.data?.pattern).not.toBe("REVERSE_LINE_MOVEMENT");
     });
@@ -74,7 +74,7 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const entry = detectorEntry(plays, "away");
       expect(entry?.verdict).toBe("AGAINST");
       expect(entry?.data?.pattern).toBe("PUBLIC_DOG_TRAP_CONFIRMED");
@@ -91,14 +91,14 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const homeEntry = detectorEntry(plays, "home");
       expect(homeEntry?.data?.pattern).not.toBe("PUBLIC_DOG_TRAP_CONFIRMED");
     });
   });
 
   describe("SHARP_MONEY_DIVERGENCE", () => {
-    it("fires SUPPORT when money % exceeds tickets % by ≥15 pts", () => {
+    it("fires SUPPORT when money % exceeds tickets % by â‰¥15 pts", () => {
       const ctx = makeCtx({
         lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.2) },
         splits: {
@@ -109,7 +109,7 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const entry = detectorEntry(plays, "home");
       expect(entry?.verdict).toBe("SUPPORT");
       expect(entry?.data?.pattern).toBe("SHARP_MONEY_DIVERGENCE");
@@ -126,7 +126,7 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       for (const p of plays) {
         expect(p.trace.find((e) => e.id === "sharp-square-detector")).toBeUndefined();
       }
@@ -135,7 +135,7 @@ describe("sharpSquareDetector", () => {
 
   describe("HEAVY_PUBLIC_NO_DIVERGENCE", () => {
     it("emits nothing when public heavy but money agrees and line stable (no fade trap)", () => {
-      // Scenario: Madrid @ 1.6, 80% tickets, 78% money, line unchanged — real consensus
+      // Scenario: Madrid @ 1.6, 80% tickets, 78% money, line unchanged â€” real consensus
       const ctx = makeCtx({
         lines: { ML_1X2: ml1x2Snapshot(1.6, 3.9, 5.5) },
         splits: {
@@ -146,14 +146,14 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const home = plays.find((p) => p.selection.side === "home");
       expect(home?.trace.find((e) => e.id === "sharp-square-detector")).toBeUndefined();
     });
   });
 
   describe("PURE_FADE_PUBLIC", () => {
-    it("fires AGAINST when ≥80% tickets and no money/line context", () => {
+    it("fires AGAINST when â‰¥80% tickets and no money/line context", () => {
       const ctx = makeCtx({
         lines: { ML_1X2: ml1x2Snapshot(1.6, 3.9, 5.5) },
         splits: {
@@ -165,19 +165,19 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const entry = detectorEntry(plays, "home");
       expect(entry?.verdict).toBe("AGAINST");
       expect(entry?.data?.pattern).toBe("PURE_FADE_PUBLIC");
     });
   });
 
-  describe("no splits → no output", () => {
+  describe("no splits â†’ no output", () => {
     it("emits nothing when splits are absent (defers to lineMovementVsPublic)", () => {
       const ctx = makeCtx({
         lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.3) },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       for (const p of plays) {
         expect(p.trace.find((e) => e.id === "sharp-square-detector")).toBeUndefined();
       }
@@ -185,13 +185,13 @@ describe("sharpSquareDetector", () => {
   });
 
   describe("lineMovementVsPublic fallback", () => {
-    it("fires when no splits and line moved ≥5%", () => {
+    it("fires when no splits and line moved â‰¥5%", () => {
       const ctx = makeCtx({
         lines: { ML_1X2: ml1x2Snapshot(2.2, 3.4, 3.3) },
         openers: { ML_1X2: ml1x2Snapshot(2.6, 3.4, 2.9, true) },
         // no splits
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       const home = plays.find((p) => p.selection.side === "home");
       expect(home?.trace.some((e) => e.id === "line-movement-vs-public")).toBe(true);
     });
@@ -207,10 +207,11 @@ describe("sharpSquareDetector", () => {
           ]),
         },
       });
-      const plays = runBondedAnalysis(ctx, { includePass: true });
+      const { candidates: plays } = runBondedAnalysis(ctx, { includePass: true });
       for (const p of plays) {
         expect(p.trace.find((e) => e.id === "line-movement-vs-public")).toBeUndefined();
       }
     });
   });
 });
+

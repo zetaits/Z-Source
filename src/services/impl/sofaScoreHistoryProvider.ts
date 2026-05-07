@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { MatchId, TeamId } from "@/domain/ids";
 import type {
   FormResult,
@@ -13,25 +14,105 @@ import type {
   HistoryTeamQuery,
 } from "@/services/providers/HistoryProvider";
 import {
+  eventStatsCacheKey,
   formCacheKey,
   h2hCacheKey,
   historyCacheRepo,
   intangiblesCacheKey,
 } from "@/storage/repos/historyCacheRepo";
+import { SOFA_API_BASE } from "@/services/scrape/selectors/sofaScore.v1";
 import {
+  eventStatisticsUrl,
+  extractXG,
   isFinishedEvent,
   readScore,
+  sofaEventStatisticsSchema,
   sofaTeamEventsResponseSchema,
   teamEventsLastUrl,
   teamEventsNextUrl,
   type SofaEventWithScore,
+  type SofaXG,
 } from "@/services/scrape/selectors/sofaScore.v2";
+import { fetchFdorgH2H } from "@/services/impl/footballDataProvider";
 
 const PROVIDER_NAME = "sofascore";
 const FORM_TTL_MS = 6 * 60 * 60 * 1000;
+
+const sofaSearchSchema = z.object({
+  results: z
+    .array(
+      z.object({
+        type: z.string(),
+        entity: z.object({ id: z.number(), name: z.string() }).passthrough(),
+      }),
+    )
+    .optional(),
+});
+
+const teamNameToSofaId = new Map<string, number | null>();
+const inflightTeamLookup = new Map<string, Promise<number | null>>();
+const inflightTeamEvents = new Map<string, Promise<SofaEventWithScore[]>>();
+
+const stripSuffixes = (name: string): string =>
+  name
+    .replace(/\b(FC|AFC|CF|SC|AC|RC|CD|CP|UD|IF|BK|Club|Calcio|Deportivo|Real)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const toAscii = (name: string): string =>
+  name.normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+const searchSofaTeamId = async (q: string): Promise<number | null> => {
+  const url = `${SOFA_API_BASE}/search/all?q=${encodeURIComponent(q)}`;
+  const raw = await fetchJson<unknown>(url);
+  if (!raw) return null;
+  const parsed = sofaSearchSchema.safeParse(raw);
+  if (!parsed.success || !parsed.data.results) return null;
+  const first = parsed.data.results.find((r) => r.type === "team");
+  return first?.entity.id ?? null;
+};
+
+const resolveTeamIdByName = async (name: string): Promise<number | null> => {
+  const key = name.toLowerCase().trim();
+  if (teamNameToSofaId.has(key)) return teamNameToSofaId.get(key)!;
+  const inflight = inflightTeamLookup.get(key);
+  if (inflight) return inflight;
+
+  const candidates = [name];
+  const stripped = stripSuffixes(name);
+  if (stripped.toLowerCase() !== key) candidates.push(stripped);
+  const ascii = toAscii(name);
+  if (ascii !== name) candidates.push(ascii);
+  const asciiStripped = toAscii(stripped);
+  if (asciiStripped !== stripped && asciiStripped !== ascii) candidates.push(asciiStripped);
+
+  const lookup = (async (): Promise<number | null> => {
+    let id: number | null = null;
+    for (const q of candidates) {
+      id = await searchSofaTeamId(q);
+      if (id) break;
+    }
+    teamNameToSofaId.set(key, id);
+    return id;
+  })().finally(() => inflightTeamLookup.delete(key));
+
+  inflightTeamLookup.set(key, lookup);
+  return lookup;
+};
 const H2H_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const INTANGIBLES_TTL_MS = 1 * 60 * 60 * 1000;
+const EVENT_STATS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CONGESTION_WINDOW_DAYS = 7;
+
+const clampNum = (v: number, lo: number, hi: number): number =>
+  Math.min(Math.max(v, lo), hi);
+
+const xPointsForGame = (xgFor: number, xgAgainst: number): number => {
+  const diff = xgFor - xgAgainst;
+  const pWin = clampNum(0.5 + diff * 0.18, 0.05, 0.95);
+  const pDraw = clampNum(0.3 - Math.abs(diff) * 0.1, 0.05, 0.3);
+  return pWin * 3 + pDraw;
+};
 
 const isFreshWithin = (iso: string, ttlMs: number): boolean => {
   const age = Date.now() - Date.parse(iso);
@@ -41,7 +122,7 @@ const isFreshWithin = (iso: string, ttlMs: number): boolean => {
 const daysBetween = (a: number, b: number): number =>
   Math.max(0, Math.floor((a - b) / (24 * 60 * 60 * 1000)));
 
-const fetchJson = async <T>(url: string): Promise<T | null> => {
+const fetchJson = async <T>(url: string, signal?: AbortSignal): Promise<T | null> => {
   try {
     const res = await httpRequest({
       url,
@@ -51,10 +132,12 @@ const fetchJson = async <T>(url: string): Promise<T | null> => {
         Accept: "application/json",
         "Accept-Language": "en-US,en;q=0.9",
       },
+      signal,
     });
     return (await res.json()) as T;
   } catch (err) {
     const e = err as { status?: number; message?: string };
+    if (signal?.aborted) return null;
     console.warn(
       `[sofascore fetch] failed · url=${url} status=${e.status ?? "?"} msg=${e.message ?? String(err)}`,
     );
@@ -62,9 +145,32 @@ const fetchJson = async <T>(url: string): Promise<T | null> => {
   }
 };
 
+const fetchEventStatistics = async (eventId: number, signal?: AbortSignal): Promise<SofaXG | null> => {
+  const cacheKey = eventStatsCacheKey(eventId);
+  const cached = await historyCacheRepo.get<SofaXG>(cacheKey).catch(() => null);
+  if (cached && isFreshWithin(cached.fetchedAt, EVENT_STATS_TTL_MS)) {
+    return cached.payload;
+  }
+  const raw = await fetchJson<unknown>(eventStatisticsUrl(eventId), signal);
+  if (!raw) return null;
+  const parsed = sofaEventStatisticsSchema.safeParse(raw);
+  if (!parsed.success) {
+    console.warn(`[sofascore stats] parse failed · eventId=${eventId}`);
+    return null;
+  }
+  const xg = extractXG(parsed.data);
+  if (xg) {
+    await historyCacheRepo
+      .upsert({ cacheKey, payload: xg, fetchedAt: new Date().toISOString() })
+      .catch(() => undefined);
+  }
+  return xg;
+};
+
 const mapGameForTeam = (
   ev: SofaEventWithScore,
   teamId: number,
+  xg?: SofaXG | null,
 ): TeamFormGame | null => {
   if (!isFinishedEvent(ev)) return null;
   const home = readScore(ev.homeScore);
@@ -87,6 +193,12 @@ const mapGameForTeam = (
     goalsFor,
     goalsAgainst,
     result,
+    ...(xg
+      ? {
+          xGFor: isHome ? xg.homeXG : xg.awayXG,
+          xGAgainst: isHome ? xg.awayXG : xg.homeXG,
+        }
+      : {}),
   };
 };
 
@@ -100,14 +212,25 @@ const aggregateForm = (
   let cleanSheets = 0;
   let bttsCount = 0;
   let points = 0;
+  let xGFor = 0;
+  let xGAgainst = 0;
+  let xPoints = 0;
+  let xGGamesCount = 0;
   for (const g of games) {
     goalsFor += g.goalsFor;
     goalsAgainst += g.goalsAgainst;
     if (g.goalsAgainst === 0) cleanSheets += 1;
     if (g.goalsFor > 0 && g.goalsAgainst > 0) bttsCount += 1;
     points += g.result === "W" ? 3 : g.result === "D" ? 1 : 0;
+    if (g.xGFor !== undefined && g.xGAgainst !== undefined) {
+      xGFor += g.xGFor;
+      xGAgainst += g.xGAgainst;
+      xPoints += xPointsForGame(g.xGFor, g.xGAgainst);
+      xGGamesCount += 1;
+    }
   }
   const n = games.length;
+  const hasXG = xGGamesCount > 0;
   return {
     teamId,
     lastN,
@@ -117,6 +240,14 @@ const aggregateForm = (
     cleanSheets,
     bttsRate: n > 0 ? bttsCount / n : 0,
     ppgLast: n > 0 ? points / n : 0,
+    pointsLast: points,
+    ...(hasXG
+      ? {
+          xGForLast: xGFor,
+          xGAgainstLast: xGAgainst,
+          xPointsLast: xPoints,
+        }
+      : {}),
   };
 };
 
@@ -148,31 +279,39 @@ const aggregateH2H = (
 
 const fetchTeamEvents = async (
   url: string,
+  signal?: AbortSignal,
 ): Promise<SofaEventWithScore[]> => {
-  const raw = await fetchJson<unknown>(url);
-  if (!raw) return [];
-  const parsed = sofaTeamEventsResponseSchema.safeParse(raw);
-  if (!parsed.success) {
-    console.warn(
-      `[sofascore team events] zod parse failed · url=${url} issues=${parsed.error.issues.length}`,
-    );
-    return [];
-  }
-  return parsed.data.events;
+  const inflight = inflightTeamEvents.get(url);
+  if (inflight) return inflight;
+  const promise = (async (): Promise<SofaEventWithScore[]> => {
+    const raw = await fetchJson<unknown>(url, signal);
+    if (!raw) return [];
+    const parsed = sofaTeamEventsResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.warn(
+        `[sofascore team events] zod parse failed · url=${url} issues=${parsed.error.issues.length}`,
+      );
+      return [];
+    }
+    return parsed.data.events;
+  })().finally(() => inflightTeamEvents.delete(url));
+  inflightTeamEvents.set(url, promise);
+  return promise;
 };
 
-const H2H_PAGES_PER_TEAM = 3;
+const H2H_PAGES_PER_TEAM = 2;
 
 const fetchMeetingsViaTeamEvents = async (
   homeSofaId: number,
   awaySofaId: number,
+  signal?: AbortSignal,
 ): Promise<SofaEventWithScore[]> => {
   const urls: string[] = [];
   for (let p = 0; p < H2H_PAGES_PER_TEAM; p++) {
     urls.push(teamEventsLastUrl(homeSofaId, p));
     urls.push(teamEventsLastUrl(awaySofaId, p));
   }
-  const pages = await Promise.all(urls.map(fetchTeamEvents));
+  const pages = await Promise.all(urls.map((u) => fetchTeamEvents(u, signal)));
   const seen = new Set<number>();
   const unique: SofaEventWithScore[] = [];
   for (const ev of pages.flat()) {
@@ -187,14 +326,18 @@ const fetchMeetingsViaTeamEvents = async (
   );
 };
 
-export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
+export const createSofaScoreHistoryProvider = (fdorgApiKey?: string): HistoryProvider => ({
   name: PROVIDER_NAME,
 
   async getForm(teamId: TeamId, lastN: number, query?: HistoryTeamQuery): Promise<TeamForm> {
-    const sofaId = query?.sofaScoreTeamId;
+    let sofaId = query?.sofaScoreTeamId;
+    if (!sofaId && query?.teamName) {
+      const resolved = await resolveTeamIdByName(query.teamName);
+      if (resolved) sofaId = resolved;
+    }
     if (!sofaId) {
       console.warn(
-        `[sofascore form] missing sofaScoreTeamId for teamId=${teamId} — returning empty form. Clear matches_cache if stale.`,
+        `[sofascore form] missing sofaScoreTeamId for teamId=${teamId} — returning empty form.`,
       );
       return aggregateForm(teamId, lastN, []);
     }
@@ -205,16 +348,24 @@ export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
       return { ...cached.payload, teamId };
     }
 
-    const events = await fetchTeamEvents(teamEventsLastUrl(sofaId, 0));
+    const events = await fetchTeamEvents(teamEventsLastUrl(sofaId, 0), query?.signal);
     // SofaScore returns events ASC by startTimestamp. Sort DESC so "last N"
     // actually means the N most recent finished games.
     const sorted = [...events].sort(
       (a, b) => b.startTimestamp - a.startTimestamp,
     );
-    const games = sorted
-      .map((ev) => mapGameForTeam(ev, sofaId))
-      .filter((g): g is TeamFormGame => g !== null)
+    const finishedSlice = sorted
+      .filter((ev) => isFinishedEvent(ev))
       .slice(0, lastN);
+
+    const statsPerEvent = await Promise.all(
+      finishedSlice.map((ev) => fetchEventStatistics(ev.id, query?.signal)),
+    );
+
+    const games = finishedSlice
+      .map((ev, i) => mapGameForTeam(ev, sofaId, statsPerEvent[i]))
+      .filter((g): g is TeamFormGame => g !== null);
+
     const form = aggregateForm(teamId, lastN, games);
     await historyCacheRepo
       .upsert({ cacheKey, payload: form, fetchedAt: new Date().toISOString() })
@@ -223,11 +374,37 @@ export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
   },
 
   async getH2H(homeId: TeamId, awayId: TeamId, query?: HistoryMatchQuery): Promise<H2H> {
-    const homeSofaId = query?.homeSofaScoreId;
-    const awaySofaId = query?.awaySofaScoreId;
+    const fdorgMatchId = query?.fdorgMatchId;
+    const homeFdorgTeamId = query?.homeFdorgTeamId;
+
+    if (fdorgApiKey && fdorgMatchId && homeFdorgTeamId) {
+      const cacheKey = `fdorg:h2h:${fdorgMatchId}`;
+      const cached = await historyCacheRepo.get<H2H>(cacheKey).catch(() => null);
+      if (cached && isFreshWithin(cached.fetchedAt, H2H_TTL_MS)) {
+        return { ...cached.payload, homeId, awayId };
+      }
+      const h2h = await fetchFdorgH2H(fdorgApiKey, fdorgMatchId, homeFdorgTeamId, homeId, awayId);
+      if (h2h) {
+        await historyCacheRepo
+          .upsert({ cacheKey, payload: h2h, fetchedAt: new Date().toISOString() })
+          .catch(() => undefined);
+        return h2h;
+      }
+    }
+
+    let homeSofaId = query?.homeSofaScoreId;
+    let awaySofaId = query?.awaySofaScoreId;
+    if (!homeSofaId && query?.homeTeamName) {
+      const resolved = await resolveTeamIdByName(query.homeTeamName);
+      if (resolved) homeSofaId = resolved;
+    }
+    if (!awaySofaId && query?.awayTeamName) {
+      const resolved = await resolveTeamIdByName(query.awayTeamName);
+      if (resolved) awaySofaId = resolved;
+    }
     if (!homeSofaId || !awaySofaId) {
       console.warn(
-        `[sofascore h2h] missing ids · homeSofaId=${homeSofaId} awaySofaId=${awaySofaId} — returning empty. Clear matches_cache if stale.`,
+        `[sofascore h2h] missing ids · homeSofaId=${homeSofaId} awaySofaId=${awaySofaId} — returning empty.`,
       );
       return aggregateH2H(homeId, awayId, []);
     }
@@ -238,7 +415,7 @@ export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
       return { ...cached.payload, homeId, awayId };
     }
 
-    const encounters = await fetchMeetingsViaTeamEvents(homeSofaId, awaySofaId);
+    const encounters = await fetchMeetingsViaTeamEvents(homeSofaId, awaySofaId, query?.signal);
     const meetings = encounters
       .map((ev) => mapGameForTeam(ev, homeSofaId))
       .filter((g): g is TeamFormGame => g !== null)
@@ -259,8 +436,16 @@ export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
     matchId: MatchId,
     query?: HistoryMatchQuery,
   ): Promise<Intangibles> {
-    const homeSofaId = query?.homeSofaScoreId;
-    const awaySofaId = query?.awaySofaScoreId;
+    let homeSofaId = query?.homeSofaScoreId;
+    let awaySofaId = query?.awaySofaScoreId;
+    if (!homeSofaId && query?.homeTeamName) {
+      const resolved = await resolveTeamIdByName(query.homeTeamName);
+      if (resolved) homeSofaId = resolved;
+    }
+    if (!awaySofaId && query?.awayTeamName) {
+      const resolved = await resolveTeamIdByName(query.awayTeamName);
+      if (resolved) awaySofaId = resolved;
+    }
     if (!homeSofaId || !awaySofaId) {
       return {
         matchId,
@@ -276,17 +461,22 @@ export const createSofaScoreHistoryProvider = (): HistoryProvider => ({
     }
 
     const [homeLast, awayLast, homeNext, awayNext] = await Promise.all([
-      fetchTeamEvents(teamEventsLastUrl(homeSofaId, 0)),
-      fetchTeamEvents(teamEventsLastUrl(awaySofaId, 0)),
-      fetchTeamEvents(teamEventsNextUrl(homeSofaId, 0)),
-      fetchTeamEvents(teamEventsNextUrl(awaySofaId, 0)),
+      fetchTeamEvents(teamEventsLastUrl(homeSofaId, 0), query?.signal),
+      fetchTeamEvents(teamEventsLastUrl(awaySofaId, 0), query?.signal),
+      fetchTeamEvents(teamEventsNextUrl(homeSofaId, 0), query?.signal),
+      fetchTeamEvents(teamEventsNextUrl(awaySofaId, 0), query?.signal),
     ]);
 
     const now = Date.now();
+    // SofaScore returns events ASC by startTimestamp, so finished[0] is the
+    // oldest finished match (often last season). Pick the latest one instead.
     const lastFinishedTs = (evs: SofaEventWithScore[]): number | null => {
       const finished = evs.filter(isFinishedEvent);
       if (finished.length === 0) return null;
-      return finished[0].startTimestamp * 1000;
+      const latest = finished.reduce((a, b) =>
+        b.startTimestamp > a.startTimestamp ? b : a,
+      );
+      return latest.startTimestamp * 1000;
     };
     const homeLastTs = lastFinishedTs(homeLast);
     const awayLastTs = lastFinishedTs(awayLast);

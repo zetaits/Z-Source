@@ -1,6 +1,7 @@
 export { runBondedAnalysis } from "./pipeline";
-export type { RunOptions } from "./pipeline";
-export { combine, MAX_PROB_SHIFT } from "./combine";
+export type { RunOptions, BondedAnalysisResult } from "./pipeline";
+export { enumerateCombos } from "./combos";
+export { combine } from "./combine";
 export type { CombinedSignal } from "./combine";
 export { sizeStakeUnits, kellyFraction } from "./stake";
 export type { SizeStakeInput } from "./stake";

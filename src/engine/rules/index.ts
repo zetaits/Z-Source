@@ -8,6 +8,8 @@ import { lineMovementVsPublic } from "./lineMovementVsPublic";
 import { restCongestion } from "./restCongestion";
 import { sharpSquareDetector } from "./sharpSquareDetector";
 import { vigAdjustedEdge } from "./vigAdjustedEdge";
+import { xGMatchupAsymmetry } from "./xGMatchupAsymmetry";
+import { xPointsRegression } from "./xPointsRegression";
 
 export const RULES: Rule[] = [
   vigAdjustedEdge,
@@ -16,6 +18,8 @@ export const RULES: Rule[] = [
   sharpSquareDetector,
   favFullMatchToFirstHalf,
   cornersHighTempo,
+  xPointsRegression,
+  xGMatchupAsymmetry,
   formDivergence,
   h2hDominance,
   restCongestion,
@@ -34,4 +38,6 @@ export {
   restCongestion,
   sharpSquareDetector,
   vigAdjustedEdge,
+  xGMatchupAsymmetry,
+  xPointsRegression,
 };

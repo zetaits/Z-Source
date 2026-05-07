@@ -56,6 +56,20 @@ export interface RuleConfig {
   params?: Record<string, unknown>;
 }
 
+export interface ComboPolicy {
+  enabled: boolean;
+  minCombinedDecimal: number;
+  minCombinedEdge: number;
+  minCombinedFairProb: number;
+}
+
+export const DEFAULT_COMBO_POLICY: ComboPolicy = {
+  enabled: true,
+  minCombinedDecimal: 1.65,
+  minCombinedEdge: 0.04,
+  minCombinedFairProb: 0.45,
+};
+
 export interface StrategyConfig {
   legWeights: LegWeights;
   legCaps: LegCaps;
@@ -63,4 +77,5 @@ export interface StrategyConfig {
   stakePolicy: StakePolicy;
   rules: RuleConfig[];
   enabledMarkets: MarketKey[];
+  comboPolicy: ComboPolicy;
 }

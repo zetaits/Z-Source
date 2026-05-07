@@ -19,6 +19,7 @@ export interface ProviderEvent {
 export interface OddsRequestContext {
   /** league-level sport key (e.g. `soccer_epl`, `soccer_italy_serie_a`). Required by the-odds-api; optional elsewhere. */
   sportKey?: string;
+  signal?: AbortSignal;
 }
 
 export interface OddsProvider {
