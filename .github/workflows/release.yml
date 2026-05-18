@@ -1,0 +1,89 @@
+name: Release
+
+# Trigger on:
+#   1. Pushing a tag like v0.1.0, v1.2.3-beta — builds a draft release with all platform installers.
+#   2. Manual dispatch — same flow, useful for testing without tagging.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            label: "macOS (Apple Silicon)"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            label: "macOS (Intel)"
+          - platform: ubuntu-22.04
+            args: ""
+            label: "Linux"
+          - platform: windows-latest
+            args: ""
+            label: "Windows"
+
+    runs-on: ${{ matrix.platform }}
+    name: Build ${{ matrix.label }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Tauri needs system libraries on Linux for the WebView (webkit2gtk) and AppImage tooling.
+      - name: Install Linux deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build Tauri bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # tauri.conf.json + Cargo.toml live under src-tauri/app-desktop, not the workspace root.
+          projectPath: src-tauri/app-desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Z-Source ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -20,6 +20,9 @@ out/
 # Vite
 .vite/
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Tauri / Rust
 src-tauri/target/
 **/target/
