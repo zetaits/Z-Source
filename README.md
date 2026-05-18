@@ -1,8 +1,8 @@
 # Z-Source
 
-Z-Source is an advanced EV+ (Positive Expected Value) Sports Betting Analytics desktop application. Built specifically to analyze the sports betting market at scale, it identifies high-value plays by combining the proprietary Bonded Betting Methodology with customizable heuristic rulesets. 
+Z-Source is an EV+ (Positive Expected Value) sports betting analytics desktop application. It identifies high-value plays by combining the proprietary **Bonded Betting Methodology** — a five-pillar evaluation across Matchup, Trends, Lines, Sharp vs. Square, and Intangibles — with a pluggable rule registry and fractional Kelly stake sizing.
 
-The system operates as a comprehensive suite for professional sports analytics, featuring real-time multi-provider odds aggregation, dynamic web-scraping for historical data and market splits, and advanced bankroll management with fractional Kelly Criterion position sizing.
+The system runs locally as a Tauri 2 desktop app, aggregating odds from multiple providers, scraping public market splits and historical match data, modelling missing alt-lines via Dixon-Coles, and tracking every recommendation through a deterministic reasoning trace.
 
 [Imagen]
 
@@ -11,67 +11,87 @@ The system operates as a comprehensive suite for professional sports analytics, 
 ## Key Capabilities
 
 ### Bonded Analysis Engine
-The core engine evaluates market opportunities across five distinct pillars (Matchup, Trends, Lines, Sharp vs. Square, and Intangibles) to generate a consolidated `PlayCandidate` score. 
-*   **Pluggable Ruleset:** Implements advanced betting concepts out-of-the-box, such as Vig-Adjusted Edge calculation, Reverse Line Movement (Sharp vs. Square), Public Underdog Trap, Form Divergence, and Rest/Congestion discrepancies.
-*   **Reasoning Trace:** Every recommendation output by the engine includes a detailed, deterministic reasoning trace, ensuring full transparency behind every generated edge.
-*   **Dynamic Stake Sizing:** Automatically calculates recommended stake units based on confidence multipliers and fractional Kelly strategies to strictly manage exposure.
+The pipeline scores each candidate across five legs and combines them through a signed, capped consolidator that gates verdicts (`PASS` / `LEAN` / `PLAY` / `STRONG`) on bonded coverage (≥3 positive legs, no leg below −0.4 for `PLAY`+).
 
-[Imagen]
+* **Pluggable rule registry** — 15 active rules: `vigAdjustedEdge`, `drawValueAt375`, `lineMovementVsPublic`, `sharpSquareDetector` (unified 5-pattern detector: RLM, DOG_TRAP, DIVERGENCE, HEAVY_NO_DIV, PURE_FADE), `favFullMatchToFirstHalf`, `cornersHighTempo`, `xPointsRegression`, `xGMatchupAsymmetry`, `bttsXgPoisson`, `goalsTempoForm`, `doubleChanceDcModel`, `teamTotalsXgDc`, `formDivergence`, `h2hDominance`, `restCongestion`.
+* **Reasoning trace** — every recommendation emits a per-leg trace with rule-fired flags, pattern tags, data-missing markers, single-book pricing warnings, and bonded badge.
+* **Diagnostics + Near-Misses** — empty-state cards surface why no plays fired (rules skipped, data gaps) and the top-3 PASS candidates ranked by `edge × confidence` for inspection.
+* **Composite ranking** — picks sort by `edge × confidence`; per-leg caps prevent any single signal from dominating.
+
+### Synthetic Alt-Lines (Dixon-Coles)
+When the book offers fewer lines than the engine wants to evaluate, Z-Source generates them itself.
+
+* **Power + Dixon-Coles** matrix from team xG produces fair probabilities for Over/Under and Asian Handicap alt-lines.
+* Synthetic offers enter the pipeline marked `book="synthetic-poisson"`; `vigAdjustedEdge` short-circuits to zero on them so signal comes from xG-based rules instead of phantom vig edges.
+* Noise thresholds (1.65% OU, 5.17% AH) prevent low-confidence synthetic lines from flooding the candidate list.
+
+### Markets Supported
+* **Mains:** 1X2, Draw No Bet, Asian Handicap, Totals (O/U Goals), BTTS, 1H Match Result, Double Chance, Team Total Goals (home/away), BTTS halves (1H / 2H).
+* **Secondaries:** Total Corners, Team Corners, Total Cards, Total Shots, Shots on Target, GK Saves, Tackles, Throw-ins.
+
+### Combo Plays
+* **Value combos** — two-leg combinations with hardcoded correlation matrix (extended for DC, TTG, BTTS halves).
+* **Anchor combos** — boosts low-decimal legs (≤1.55, confidence ≥0.65, ρ ≥0.15) into the 1.60–2.20 sweet spot. UI distinguishes Value vs. Anchor sections per match.
 
 ### Multi-Provider Data Ingestion
-Z-Source maximizes external API quotas while ensuring high data fidelity through a strict fallback mechanism and local caching.
-*   **Odds Aggregation:** Consumes odds directly from primary providers (e.g., odds-api.io) with seamless failovers (e.g., the-odds-api.com) built directly into the client.
-*   **Action Splits & Sentiment:** Scrapes public ticket and money percentages from leading sports consensus networks to power the Sharp vs. Square analysis rules.
-*   **Catalog & History:** Leverages intelligent scraping (e.g., SofaScore) for match catalogs, recent team forms, head-to-head records, and team congestion schedules without exhausting paid API quotas.
+Strict fallback chain, quota tracking, local cache.
 
-### Bankroll & Ledger Management
-Complete local portfolio tracking ensuring privacy and robust statistical analysis of past performance.
-*   **Equity Curve & Yield:** Auto-generated performance charts tracking ROI, units won/lost, and active market exposure.
-*   **Closing Line Value (CLV) Tracking:** Automatically captures the final odds before kickoff to analyze whether placed bets consistently beat the closing line.
-*   **Data Portability:** Full support for importing and exporting ledger data and betting strategies via CSV and JSON formats.
+* **Odds aggregation** — primary `odds-api.io` (100/h free tier; capped backfill: top 2 books × 3 markets × median line ≈ 6 req/match) with failover to `the-odds-api.com`. Single-book pricing mode filters offers to user-selected books and warns on phantom edges.
+* **Catalog + history** — SofaScore for fixtures, recent forms, H2H, congestion, and `/event/{id}/statistics` for xG ingestion. Requires browser TLS fingerprint (`preferBrowserFetch: true`); native curl/node hits 403.
+* **Action splits** — Action Network + SBR scraping for ticket/money percentages powering Sharp vs. Square detection.
+* **Quota tracker** — per-provider usage persisted in SQLite; UI surfaces remaining budget.
 
-[Imagen]
+### Backtest Harness
+* `/backtest` page ingests football-data.co.uk CSVs (E0/SP1/I1/D1/F1) with Pinnacle closing odds (PSCH/PSCD/PSCA, PAHH/PAHA, P>2.5 / P<2.5).
+* Reconstructs `AnalysisContext` per historical match (form + H2H from prior fixtures), runs the live pipeline, resolves outcomes for 1X2 / DNB / AH (quarter-line) / OU / BTTS / DC / TTG.
+* Reports hit rate and ROI by `verdict × market`. Limitation: no xG / splits / openers in CSVs — xG-based rules skip silently.
+
+### Telemetry & Calibration
+* `/metrics` page reads from `pick_outcomes` (auto-mirrored from `useLogBet` / `useSettleBet`).
+* KPI cards, summary table by `verdict × market`, and calibration scatter chart (recharts) plotting predicted probability vs. realised hit rate.
+
+### Bankroll & Ledger
+* **Equity curve & yield** — ROI, units won/lost, active exposure.
+* **Closing Line Value** — captures final pre-kickoff odds for CLV-vs-bet analysis.
+* **Fractional Kelly** stake sizing with confidence multipliers and per-leg caps.
+* **Portability** — full CSV / JSON import-export for ledger and strategies.
 
 ---
 
 ## Technical Architecture
 
-Z-Source is distributed as a secure, fast, cross-platform desktop application powered by **Tauri v2**. The local-first architecture ensures analytical speed without central cloud bottlenecks.
+Local-first Tauri 2 desktop binary; no remote backend.
 
-*   **Frontend Ecosystem:** React 18, TypeScript, TailwindCSS, and shadcn/ui.
-*   **Application State & Caching:** TanStack Query for server-state synchronization with local persistence.
-*   **Backend & Interoperability:** Rust (Tauri), utilizing `tauri-plugin-sql` for local SQLite migrations, `tauri-plugin-store` for secure credential management, and `tauri-plugin-http` for bypassing browser CORS limitations during data scraping.
-*   **Data Validation:** Zod schemas applied to all provider responses and engine outputs.
-
-[Imagen]
+* **Frontend:** React 18, TypeScript, TailwindCSS, shadcn/ui, TanStack Query (with sync-storage persistence), `cmdk` palette, recharts.
+* **Backend glue:** Rust via Tauri 2 — `tauri-plugin-sql` (SQLite migrations), `tauri-plugin-store` (credentials), `tauri-plugin-http` (CORS-bypass for scraping).
+* **Engine:** pure TypeScript. Rules are 1 file + 1 line in the registry; markets are one `MarketAdapter` each.
+* **Validation:** Zod schemas on every provider response and engine output.
+* **Testing:** Vitest + Testing Library + MSW + fast-check. Engine suite covers rules, markets, combine, pipeline, synthetic, and provider fallbacks.
 
 ---
 
 ## Local Development
 
 ### Prerequisites
-*   Node.js (v18+)
-*   Rust toolchain (cargo, rustc)
-*   Tauri dependencies installed for your operating system
+* Node.js 18+
+* Rust toolchain (cargo, rustc)
+* Tauri 2 system dependencies for your OS (see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites))
 
 ### Setup & Run
 
-1.  **Install Application Dependencies:**
-    ```bash
-    npm install
-    ```
+```bash
+npm install
+npm run tauri:dev      # full desktop app (Vite + Rust)
+npm run dev            # web-only, for fast UI iteration
+npm run test           # vitest suite
+npm run tauri:build    # production binary
+```
 
-2.  **Start the Development Environment:**
-    ```bash
-    npm run tauri:dev
-    ```
-    This command will concurrently start the Vite development server and compile the Rust binary, launching the application window.
-
-3.  **Build for Production:**
-    ```bash
-    npm run tauri:build
-    ```
+### Releases
+Tagging `v*` (e.g. `v0.1.0`) triggers `.github/workflows/release.yml`, which builds installers for macOS (Apple Silicon + Intel), Linux, and Windows and drafts a GitHub release.
 
 ---
 
-*Notice: This software is designed strictly for analytical and educational purposes.*
+## Disclaimers
+
+This software is provided for analytical and educational purposes. Sports betting is regulated differently in every jurisdiction; users are responsible for compliance with local laws. The engine surfaces statistical edges — it does not guarantee profit and offers no investment advice. All data, credentials, and ledger state remain on the user's machine.
