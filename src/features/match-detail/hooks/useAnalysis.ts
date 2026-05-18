@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { LeagueId, MatchId, TeamId } from "@/domain/ids";
+import { BookId, LeagueId, MatchId, TeamId } from "@/domain/ids";
 import type { H2H, Intangibles, TeamForm } from "@/domain/history";
 import type { CatalogMatch, Match } from "@/domain/match";
 import type { MarketKey, Selection } from "@/domain/market";
@@ -10,6 +10,12 @@ import type { StrategyConfig } from "@/domain/strategy";
 import { findLeagueById } from "@/config/leagues";
 import { DEFAULT_UNIT_BANKROLL_FRACTION, type AnalysisContext } from "@/engine/context";
 import { runBondedAnalysis } from "@/engine";
+import type { AnalysisDiagnostics } from "@/engine";
+import {
+  computeSyntheticAH,
+  computeSyntheticOU,
+  type SyntheticPrice,
+} from "@/engine/synthetic";
 import type { OddsProvider } from "@/services/providers/OddsProvider";
 import { resolveProviders } from "@/services/providers/factory";
 import { createMatchResolver } from "@/services/resolver/MatchResolver";
@@ -30,9 +36,13 @@ export interface ResolutionInfo {
 
 export interface AnalysisResult {
   plays: PlayCandidate[];
+  /** All evaluated selections including PASS — used for closest-to-threshold rail and odds-board edge overlay. */
+  allCandidates: PlayCandidate[];
   combos: ComboPlay[];
+  diagnostics?: AnalysisDiagnostics;
   lines: Partial<Record<MarketKey, LineSnapshot>>;
   openers: Partial<Record<MarketKey, LineSnapshot>>;
+  synthetic: Partial<Record<MarketKey, SyntheticPrice[]>>;
   splits: Partial<Record<MarketKey, Splits>>;
   splitsAvailable: boolean;
   splitsProvider: string;
@@ -48,6 +58,37 @@ export interface AnalysisResult {
   resolution?: ResolutionInfo;
   generatedAt: string;
 }
+
+const SYNTHETIC_BOOK = BookId("synthetic-poisson");
+
+const mergeSyntheticIntoLines = (
+  marketKey: "OU_GOALS" | "AH",
+  realLines: LineSnapshot | undefined,
+  syntheticPrices: SyntheticPrice[],
+  matchId: MatchId,
+  takenAt: string,
+): LineSnapshot | undefined => {
+  if (syntheticPrices.length === 0) return realLines;
+  const realOffers = realLines?.offers ?? [];
+  const existing = new Set(
+    realOffers
+      .filter((o) => o.selection.line !== undefined)
+      .map((o) => `${o.selection.side}:${o.selection.line}`),
+  );
+  const syntheticOffers: BookOffer[] = syntheticPrices
+    .filter((sp) => !existing.has(`${sp.side}:${sp.line}`))
+    .map((sp) => ({
+      book: SYNTHETIC_BOOK,
+      selection: { marketKey, side: sp.side, line: sp.line },
+      decimal: sp.decimal,
+      takenAt,
+    }));
+  if (syntheticOffers.length === 0) return realLines;
+  if (!realLines) {
+    return { matchId, marketKey, offers: syntheticOffers, takenAt };
+  }
+  return { ...realLines, offers: [...realLines.offers, ...syntheticOffers] };
+};
 
 const toMatch = (c: CatalogMatch, matchId: MatchId): Match => ({
   id: matchId,
@@ -85,6 +126,88 @@ const persistSnapshots = async (
       });
     }
   }
+};
+
+const BACKFILL_TARGET_MARKETS: MarketKey[] = ["ML_1X2", "AH", "OU_GOALS"];
+const BACKFILL_MAX_BOOKS = 2;
+
+const pickTopBooks = (snapshots: LineSnapshot[], max: number): string[] => {
+  const counts = new Map<string, number>();
+  for (const snap of snapshots) {
+    for (const o of snap.offers) {
+      const b = String(o.book);
+      counts.set(b, (counts.get(b) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([b]) => b);
+};
+
+const pickMedianLine = (snap: LineSnapshot, book: string): number | undefined => {
+  const lines = [
+    ...new Set(
+      snap.offers
+        .filter((o) => String(o.book) === book && o.selection.line !== undefined)
+        .map((o) => o.selection.line as number),
+    ),
+  ].sort((a, b) => a - b);
+  if (lines.length === 0) return undefined;
+  return lines[Math.floor(lines.length / 2)];
+};
+
+const backfillOpeners = async (
+  matchId: MatchId,
+  snapshots: LineSnapshot[],
+  provider: OddsProvider,
+  signal?: AbortSignal,
+): Promise<number> => {
+  if (!provider.getMovements) return 0;
+  if (!isPersistentStorage()) return 0;
+  if (await snapshotsRepo.hasOpener(matchId)) return 0;
+
+  const books = pickTopBooks(snapshots, BACKFILL_MAX_BOOKS);
+  if (books.length === 0) return 0;
+
+  let persisted = 0;
+  for (const book of books) {
+    for (const marketKey of BACKFILL_TARGET_MARKETS) {
+      const snap = snapshots.find((s) => s.marketKey === marketKey);
+      if (!snap) continue;
+      const needsLine = marketKey === "AH" || marketKey === "OU_GOALS";
+      const line = needsLine ? pickMedianLine(snap, book) : undefined;
+      if (needsLine && line === undefined) continue;
+
+      try {
+        const result = await provider.getMovements(
+          matchId,
+          marketKey,
+          BookId(book),
+          line,
+          { signal },
+        );
+        if (!result || result.opener.length === 0) continue;
+        for (const offer of result.opener) {
+          await snapshotsRepo.recordOffer({
+            matchId,
+            marketKey,
+            selection: offer.selection,
+            priceDecimal: offer.decimal,
+            book: offer.book,
+            takenAt: offer.takenAt,
+            isOpener: true,
+          });
+          persisted += 1;
+        }
+      } catch (err) {
+        console.warn(
+          `[backfillOpeners] ${marketKey}/${book} failed: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+  return persisted;
 };
 
 const FORM_LAST_N = 6;
@@ -230,9 +353,11 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
 
   const baseEmpty = (): Omit<AnalysisResult, "status" | "message" | "resolution"> => ({
     plays: [],
+    allCandidates: [],
     combos: [],
     lines: {},
     openers: {},
+    synthetic: {},
     splits: {},
     splitsAvailable: false,
     splitsProvider: "",
@@ -297,10 +422,16 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
         return { kind: "empty-odds", resolution };
       }
 
-      await Promise.all([
-        persistSnapshots(matchId, snapshots, true).catch(() => {}),
-        persistSnapshots(matchId, snapshots, false).catch(() => {}),
-      ]);
+      await persistSnapshots(matchId, snapshots, false).catch(() => {});
+      const realOpeners = await backfillOpeners(
+        matchId,
+        snapshots,
+        oddsProvider,
+        parentSignal,
+      ).catch(() => 0);
+      if (realOpeners === 0) {
+        await persistSnapshots(matchId, snapshots, true).catch(() => {});
+      }
       const openers = await loadOpeners(matchId).catch(() => ({}));
 
       return { kind: "ok", matchId, snapshots, openers, resolution };
@@ -443,6 +574,43 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
   const splitsAvailable = Boolean(splitsList && splitsList.length > 0);
   const lines = indexByMarket(snapshots);
 
+  const synthetic: Partial<Record<MarketKey, SyntheticPrice[]>> = {};
+  try {
+    const ouSynth = computeSyntheticOU(lines.OU_GOALS);
+    if (ouSynth.length > 0) synthetic.OU_GOALS = ouSynth;
+    const ahSynth = computeSyntheticAH(lines.OU_GOALS, lines.AH, lines.ML_1X2);
+    if (ahSynth.length > 0) synthetic.AH = ahSynth;
+  } catch (err) {
+    console.warn("[useAnalysis] synthetic line generation failed", err);
+  }
+
+  // Inject synthetic OU + AH lines into the engine pipeline so xG-based rules
+  // can emit picks on lines the book does not offer. Reasoning: λ in xG rules
+  // is derived from team xG (independent of market), so comparing modelP vs
+  // synthetic-derived baseProb gives a real signal — not circular. We only
+  // add lines NOT present in real offers, marked with book="synthetic-poisson"
+  // so the user can see the source in the trace.
+  if (synthetic.OU_GOALS && synthetic.OU_GOALS.length > 0) {
+    const merged = mergeSyntheticIntoLines(
+      "OU_GOALS",
+      lines.OU_GOALS,
+      synthetic.OU_GOALS,
+      matchId,
+      generatedAt,
+    );
+    if (merged) lines.OU_GOALS = merged;
+  }
+  if (synthetic.AH && synthetic.AH.length > 0) {
+    const merged = mergeSyntheticIntoLines(
+      "AH",
+      lines.AH,
+      synthetic.AH,
+      matchId,
+      generatedAt,
+    );
+    if (merged) lines.AH = merged;
+  }
+
   const ctx: AnalysisContext = {
     match: engineMatch,
     strategy,
@@ -458,12 +626,18 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
     generatedAt,
   };
 
-  const { candidates: plays, combos } = runBondedAnalysis(ctx, { includePass: false });
+  const { candidates: allCandidates, combos, diagnostics } = runBondedAnalysis(ctx, {
+    includePass: true,
+  });
+  const plays = allCandidates.filter((c) => c.verdict !== "PASS");
   return {
     plays,
+    allCandidates,
     combos,
+    diagnostics,
     lines,
     openers,
+    synthetic,
     splits,
     splitsAvailable,
     splitsProvider: splitProvider.name,

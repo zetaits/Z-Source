@@ -20,6 +20,11 @@ import {
   historyCacheRepo,
   intangiblesCacheKey,
 } from "@/storage/repos/historyCacheRepo";
+import {
+  normalizeTeamName,
+  normalizedTokens,
+  teamSimilarity,
+} from "@/services/resolver/teamNameNormalizer";
 import { SOFA_API_BASE } from "@/services/scrape/selectors/sofaScore.v1";
 import {
   eventStatisticsUrl,
@@ -53,50 +58,160 @@ const teamNameToSofaId = new Map<string, number | null>();
 const inflightTeamLookup = new Map<string, Promise<number | null>>();
 const inflightTeamEvents = new Map<string, Promise<SofaEventWithScore[]>>();
 
-const stripSuffixes = (name: string): string =>
-  name
-    .replace(/\b(FC|AFC|CF|SC|AC|RC|CD|CP|UD|IF|BK|Club|Calcio|Deportivo|Real)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const toAscii = (name: string): string =>
-  name.normalize("NFD").replace(/[̀-ͯ]/g, "");
-
-const searchSofaTeamId = async (q: string): Promise<number | null> => {
-  const url = `${SOFA_API_BASE}/search/all?q=${encodeURIComponent(q)}`;
-  const raw = await fetchJson<unknown>(url);
-  if (!raw) return null;
-  const parsed = sofaSearchSchema.safeParse(raw);
-  if (!parsed.success || !parsed.data.results) return null;
-  const first = parsed.data.results.find((r) => r.type === "team");
-  return first?.entity.id ?? null;
+export const _resetSofaScoreProviderCachesForTests = (): void => {
+  teamNameToSofaId.clear();
+  inflightTeamLookup.clear();
+  inflightTeamEvents.clear();
 };
 
+interface SofaTeamHit {
+  id: number;
+  name: string;
+}
+
+interface ResolvedTeam {
+  sofaTeamId: number;
+  originalNames: string[];
+  confidence: number;
+  resolvedAt: string;
+}
+
+const RESOLVE_THRESHOLD = 0.75;
+const RESOLVE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const RESOLVE_CACHE_PREFIX = "team-resolve:sofascore:";
+
+const resolveCacheKey = (normalized: string): string =>
+  `${RESOLVE_CACHE_PREFIX}${normalized}`;
+
+// Generates progressively-shorter query candidates so SofaScore search can hit
+// even when the canonical catalog name carries extra tokens (e.g. city suffix
+// "Seville", brand prefix). Order: full → prefix drop-last → suffix drop-first
+// → 2-token windows → single most-distinctive token.
+const buildQueryCandidates = (name: string, normalized: string): string[] => {
+  const out = new Set<string>();
+  if (name.trim().length > 0) out.add(name.trim());
+  if (normalized.length > 0) out.add(normalized);
+  const tokens = normalizedTokens(name);
+  if (tokens.length >= 2) {
+    out.add(tokens.slice(0, -1).join(" "));
+    out.add(tokens.slice(1).join(" "));
+  }
+  if (tokens.length >= 3) {
+    for (let i = 0; i <= tokens.length - 2; i++) {
+      out.add(tokens.slice(i, i + 2).join(" "));
+    }
+  }
+  // Final fallback: single longest token (most distinctive).
+  if (tokens.length > 0) {
+    const longest = [...tokens].sort((a, b) => b.length - a.length)[0];
+    if (longest.length >= 4) out.add(longest);
+  }
+  return Array.from(out);
+};
+
+const searchSofaTeamHits = async (q: string): Promise<SofaTeamHit[]> => {
+  const url = `${SOFA_API_BASE}/search/all?q=${encodeURIComponent(q)}`;
+  const raw = await fetchJson<unknown>(url);
+  if (!raw) return [];
+  const parsed = sofaSearchSchema.safeParse(raw);
+  if (!parsed.success || !parsed.data.results) return [];
+  return parsed.data.results
+    .filter((r) => r.type === "team")
+    .map((r) => ({ id: r.entity.id, name: r.entity.name }));
+};
+
+const rankHits = (
+  input: string,
+  hits: SofaTeamHit[],
+): Array<{ hit: SofaTeamHit; score: number }> =>
+  hits
+    .map((hit) => ({ hit, score: teamSimilarity(input, hit.name) }))
+    .sort((a, b) => b.score - a.score);
+
 const resolveTeamIdByName = async (name: string): Promise<number | null> => {
-  const key = name.toLowerCase().trim();
-  if (teamNameToSofaId.has(key)) return teamNameToSofaId.get(key)!;
-  const inflight = inflightTeamLookup.get(key);
+  const normalized = normalizeTeamName(name);
+  if (!normalized) return null;
+  const cacheKey = resolveCacheKey(normalized);
+
+  if (teamNameToSofaId.has(normalized)) {
+    const cached = teamNameToSofaId.get(normalized);
+    return cached ?? null;
+  }
+  const inflight = inflightTeamLookup.get(normalized);
   if (inflight) return inflight;
 
-  const candidates = [name];
-  const stripped = stripSuffixes(name);
-  if (stripped.toLowerCase() !== key) candidates.push(stripped);
-  const ascii = toAscii(name);
-  if (ascii !== name) candidates.push(ascii);
-  const asciiStripped = toAscii(stripped);
-  if (asciiStripped !== stripped && asciiStripped !== ascii) candidates.push(asciiStripped);
-
   const lookup = (async (): Promise<number | null> => {
-    let id: number | null = null;
-    for (const q of candidates) {
-      id = await searchSofaTeamId(q);
-      if (id) break;
+    const persisted = await historyCacheRepo
+      .get<ResolvedTeam>(cacheKey)
+      .catch(() => null);
+    if (persisted && isFreshWithin(persisted.fetchedAt, RESOLVE_TTL_MS)) {
+      teamNameToSofaId.set(normalized, persisted.payload.sofaTeamId);
+      if (!persisted.payload.originalNames.includes(name)) {
+        await historyCacheRepo
+          .upsert<ResolvedTeam>({
+            cacheKey,
+            payload: {
+              ...persisted.payload,
+              originalNames: [...persisted.payload.originalNames, name],
+            },
+            fetchedAt: persisted.fetchedAt,
+          })
+          .catch(() => {});
+      }
+      return persisted.payload.sofaTeamId;
     }
-    teamNameToSofaId.set(key, id);
-    return id;
-  })().finally(() => inflightTeamLookup.delete(key));
 
-  inflightTeamLookup.set(key, lookup);
+    const queries = buildQueryCandidates(name, normalized);
+
+    let bestScore = 0;
+    let bestHit: SofaTeamHit | null = null;
+    const topCandidates: Array<{ name: string; score: number }> = [];
+
+    for (const q of queries) {
+      const hits = await searchSofaTeamHits(q);
+      if (hits.length === 0) continue;
+      const ranked = rankHits(name, hits);
+      for (const r of ranked.slice(0, 5)) {
+        topCandidates.push({ name: r.hit.name, score: r.score });
+      }
+      const top = ranked[0];
+      if (top && top.score > bestScore) {
+        bestScore = top.score;
+        bestHit = top.hit;
+      }
+      if (bestScore >= 0.95) break;
+    }
+
+    if (!bestHit || bestScore < RESOLVE_THRESHOLD) {
+      const top3 = topCandidates
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+        .map((c) => `"${c.name}" ${c.score.toFixed(2)}`)
+        .join(", ");
+      console.warn(
+        `[sofascore resolve] no match for "${name}" (normalized "${normalized}"). Top: [${top3 || "none"}]. Threshold ${RESOLVE_THRESHOLD}.`,
+      );
+      teamNameToSofaId.set(normalized, null);
+      return null;
+    }
+
+    teamNameToSofaId.set(normalized, bestHit.id);
+    await historyCacheRepo
+      .upsert<ResolvedTeam>({
+        cacheKey,
+        payload: {
+          sofaTeamId: bestHit.id,
+          originalNames: [name],
+          confidence: bestScore,
+          resolvedAt: new Date().toISOString(),
+        },
+        fetchedAt: new Date().toISOString(),
+      })
+      .catch(() => {});
+    return bestHit.id;
+  })().finally(() => inflightTeamLookup.delete(normalized));
+
+  inflightTeamLookup.set(normalized, lookup);
   return lookup;
 };
 const H2H_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -299,7 +414,7 @@ const fetchTeamEvents = async (
   return promise;
 };
 
-const H2H_PAGES_PER_TEAM = 2;
+const H2H_PAGES_PER_TEAM = 4;
 
 const fetchMeetingsViaTeamEvents = async (
   homeSofaId: number,
@@ -378,7 +493,7 @@ export const createSofaScoreHistoryProvider = (fdorgApiKey?: string): HistoryPro
     const homeFdorgTeamId = query?.homeFdorgTeamId;
 
     if (fdorgApiKey && fdorgMatchId && homeFdorgTeamId) {
-      const cacheKey = `fdorg:h2h:${fdorgMatchId}`;
+      const cacheKey = `fdorg:h2h:v2:${fdorgMatchId}`;
       const cached = await historyCacheRepo.get<H2H>(cacheKey).catch(() => null);
       if (cached && isFreshWithin(cached.fetchedAt, H2H_TTL_MS)) {
         return { ...cached.payload, homeId, awayId };

@@ -150,8 +150,19 @@ export const createActionNetworkSplitProvider = (): SplitProvider => ({
 
     const match = bestMatch(games, ctx.homeName, ctx.awayName);
     if (!match) {
+      const sample = games
+        .slice(0, 5)
+        .map((g) => {
+          const splits = extractMlSplits(g);
+          if (!splits) return null;
+          const homeSim = teamSimilarity(splits.homeTeamName, ctx.homeName);
+          const awaySim = teamSimilarity(splits.awayTeamName, ctx.awayName);
+          return `${splits.homeTeamName} vs ${splits.awayTeamName} (h=${homeSim.toFixed(2)},a=${awaySim.toFixed(2)})`;
+        })
+        .filter(Boolean)
+        .join(" | ");
       console.warn(
-        `[action-network] no fuzzy match · home="${ctx.homeName}" away="${ctx.awayName}" candidates=${games.length}`,
+        `[action-network] no fuzzy match · home="${ctx.homeName}" away="${ctx.awayName}" candidates=${games.length} threshold=${MATCH_THRESHOLD}. Sample: ${sample}`,
       );
       return null;
     }

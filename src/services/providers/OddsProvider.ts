@@ -1,6 +1,6 @@
-import type { MatchId } from "@/domain/ids";
+import type { BookId, MatchId } from "@/domain/ids";
 import type { MarketKey } from "@/domain/market";
-import type { LineSnapshot } from "@/domain/odds";
+import type { BookOffer, LineSnapshot } from "@/domain/odds";
 
 export interface QuotaSnapshot {
   remaining: number | null;
@@ -22,6 +22,12 @@ export interface OddsRequestContext {
   signal?: AbortSignal;
 }
 
+export interface OddsMovements {
+  opener: BookOffer[];
+  latest: BookOffer[];
+  movements: BookOffer[][];
+}
+
 export interface OddsProvider {
   readonly name: string;
   getOdds(
@@ -33,6 +39,13 @@ export interface OddsProvider {
     matchId: MatchId,
     context?: OddsRequestContext,
   ): Promise<LineSnapshot[]>;
+  getMovements?(
+    matchId: MatchId,
+    marketKey: MarketKey,
+    book: BookId,
+    line?: number,
+    context?: OddsRequestContext,
+  ): Promise<OddsMovements | null>;
   listEvents(sportKey: string): Promise<ProviderEvent[]>;
   quota(): QuotaSnapshot;
 }

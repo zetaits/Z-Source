@@ -7,6 +7,8 @@ import {
   SlidersHorizontal,
   Settings as SettingsIcon,
   FlaskConical,
+  LineChart,
+  History,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,6 +32,8 @@ const PERFORMANCE: Group = {
   label: "Performance",
   items: [
     { to: "/bankroll", label: "Bankroll", icon: Wallet, end: false },
+    { to: "/metrics", label: "Metrics", icon: LineChart, end: false },
+    { to: "/backtest", label: "Backtest", icon: History, end: false },
     { to: "/strategy", label: "Strategy", icon: SlidersHorizontal, end: false },
     { to: "/settings", label: "Settings", icon: SettingsIcon, end: false },
   ],

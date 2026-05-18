@@ -20,6 +20,11 @@ export const DEFAULT_ENABLED_MARKETS: MarketKey[] = [
   "AH",
   "OU_GOALS",
   "BTTS",
+  "BTTS_1H",
+  "BTTS_2H",
+  "DC",
+  "TTG_HOME",
+  "TTG_AWAY",
   "CORNERS_TOTAL",
 ];
 

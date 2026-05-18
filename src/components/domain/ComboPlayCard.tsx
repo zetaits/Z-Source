@@ -30,13 +30,21 @@ export function ComboPlayCard({ combo }: Props) {
   const ev = combo.edgePct;
   const evPct = (ev * 100).toFixed(2);
   const tier = tierFor(ev);
-  const railColor =
-    tier === "prime" ? "var(--zs-pos)" : tier === "standard" ? "var(--zs-info)" : "var(--zs-warn)";
-  const evColor = railColor;
-  const borderColor =
-    tier === "prime"
+  const isAnchor = combo.comboType === "ANCHOR";
+  const railColor = isAnchor
+    ? "var(--zs-warn)"
+    : tier === "prime"
+      ? "var(--zs-pos)"
+      : tier === "standard"
+        ? "var(--zs-info)"
+        : "var(--zs-warn)";
+  const evColor = isAnchor ? "var(--zs-warn)" : railColor;
+  const borderColor = isAnchor
+    ? "color-mix(in oklch, var(--zs-warn) 35%, var(--zs-border))"
+    : tier === "prime"
       ? "color-mix(in oklch, var(--zs-pos) 40%, var(--zs-border))"
       : "var(--zs-border)";
+  const baseLeg = isAnchor && combo.legs[0] ? combo.legs[0] : null;
 
   return (
     <div
@@ -59,12 +67,17 @@ export function ComboPlayCard({ combo }: Props) {
         <div className="flex items-center gap-2">
           <span
             className="rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em]"
-            style={{ background: "var(--zs-info-fill)", color: "var(--zs-info)" }}
+            style={{
+              background: isAnchor ? "var(--zs-warn-fill)" : "var(--zs-info-fill)",
+              color: isAnchor ? "var(--zs-warn)" : "var(--zs-info)",
+            }}
           >
-            Combo
+            {isAnchor ? "Anchor" : "Combo"}
           </span>
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            {combo.legs.length}-leg parlay
+            {isAnchor
+              ? `boosted ${baseLeg?.priceDecimal.toFixed(2)} → ${combo.combinedDecimal.toFixed(2)}`
+              : `${combo.legs.length}-leg parlay`}
           </span>
           {combo.rho !== 0 && (
             <span className="font-mono text-[10px] text-fg-muted/70">

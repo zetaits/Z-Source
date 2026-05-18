@@ -1,19 +1,39 @@
 import { PlayId } from "@/domain/ids";
+import type { MarketKey } from "@/domain/market";
 import type { ComboPlay, PlayCandidate, Verdict } from "@/domain/play";
 import { DEFAULT_COMBO_POLICY } from "@/domain/strategy";
 import type { ReasoningEntry } from "@/domain/trace";
 import type { AnalysisContext } from "./context";
 import { combine, type BondedMeta } from "./combine";
-import { enumerateCombos } from "./combos";
+import { enumerateAnchorCombos, enumerateCombos } from "./combos";
 import { clamp, edgePct } from "./ev";
 import { MARKET_ADAPTERS } from "./markets";
 import { RULES } from "./rules";
 import { sizeStakeUnits } from "./stake";
 import type { MarketAdapter, Rule, RuleOutput } from "./types";
 
+export interface AnalysisDiagnostics {
+  selectionsEnumerated: number;
+  selectionsSkipped: { noPrice: number; noBaseProb: number };
+  verdictBreakdown: Record<Verdict, number>;
+  rulesFired: Record<string, number>;
+  rulesSkippedDataMissing: Record<string, number>;
+  dataMissing: {
+    homeForm: boolean;
+    awayForm: boolean;
+    homeXG: boolean;
+    awayXG: boolean;
+    splitsMissing: MarketKey[];
+    openersMissing: MarketKey[];
+    h2hMeetings: number;
+    intangibles: boolean;
+  };
+}
+
 export interface BondedAnalysisResult {
   candidates: PlayCandidate[];
   combos: ComboPlay[];
+  diagnostics: AnalysisDiagnostics;
 }
 
 const uid = (): string =>
@@ -66,12 +86,37 @@ export const runBondedAnalysis = (
   );
 
   const candidates: PlayCandidate[] = [];
+  const diagnostics: AnalysisDiagnostics = {
+    selectionsEnumerated: 0,
+    selectionsSkipped: { noPrice: 0, noBaseProb: 0 },
+    verdictBreakdown: { PASS: 0, LEAN: 0, PLAY: 0, STRONG: 0 },
+    rulesFired: {},
+    rulesSkippedDataMissing: {},
+    dataMissing: {
+      homeForm: !ctx.homeForm,
+      awayForm: !ctx.awayForm,
+      homeXG: ctx.homeForm?.xGForLast === undefined,
+      awayXG: ctx.awayForm?.xGForLast === undefined,
+      splitsMissing: strategy.enabledMarkets.filter((m) => !ctx.splits[m]),
+      openersMissing: strategy.enabledMarkets.filter((m) => !ctx.openers[m]),
+      h2hMeetings: ctx.h2h?.meetings.length ?? 0,
+      intangibles: !ctx.intangibles,
+    },
+  };
 
   for (const adapter of adapters) {
     for (const selection of adapter.enumerate(ctx)) {
+      diagnostics.selectionsEnumerated++;
       const price = adapter.bestPrice(selection, ctx);
       const baseProb = adapter.vigFreeProb(selection, ctx);
-      if (!price || baseProb === undefined) continue;
+      if (!price) {
+        diagnostics.selectionsSkipped.noPrice++;
+        continue;
+      }
+      if (baseProb === undefined) {
+        diagnostics.selectionsSkipped.noBaseProb++;
+        continue;
+      }
 
       const outputs: RuleOutput[] = [];
       for (const rule of activeRules) {
@@ -89,7 +134,13 @@ export const runBondedAnalysis = (
           baseProb,
           price,
         });
-        if (out) outputs.push(out);
+        if (out) {
+          outputs.push(out);
+          diagnostics.rulesFired[rule.id] = (diagnostics.rulesFired[rule.id] ?? 0) + 1;
+        } else {
+          diagnostics.rulesSkippedDataMissing[rule.id] =
+            (diagnostics.rulesSkippedDataMissing[rule.id] ?? 0) + 1;
+        }
       }
 
       const combined = combine(outputs, baseProb, strategy.legWeights, strategy.legCaps);
@@ -100,6 +151,7 @@ export const runBondedAnalysis = (
         combined.meta,
         strategy.minLegsAlignedForBonded,
       );
+      diagnostics.verdictBreakdown[verdict]++;
 
       if (verdict === "PASS" && !opts.includePass) continue;
 
@@ -183,7 +235,21 @@ export const runBondedAnalysis = (
   candidates.sort((a, b) => b.edgePct * b.confidence - a.edgePct * a.confidence);
 
   const comboPolicy = ctx.strategy.comboPolicy ?? DEFAULT_COMBO_POLICY;
-  const combos = enumerateCombos(candidates, comboPolicy, ctx.generatedAt);
+  const valueCombos = enumerateCombos(candidates, comboPolicy, ctx.generatedAt);
+  const anchorCombos = enumerateAnchorCombos(
+    candidates,
+    comboPolicy.anchorMode,
+    ctx.generatedAt,
+  );
+  const combos = [...valueCombos, ...anchorCombos];
 
-  return { candidates, combos };
+  if (typeof console !== "undefined" && console.debug) {
+    const rulesActive = activeRules.length;
+    const rulesFiredCount = Object.keys(diagnostics.rulesFired).length;
+    console.debug(
+      `[pipeline] match=${ctx.match.id} · ${diagnostics.selectionsEnumerated} selections · ${rulesFiredCount}/${rulesActive} rules fired · verdicts=${JSON.stringify(diagnostics.verdictBreakdown)} · skipped(noPrice=${diagnostics.selectionsSkipped.noPrice}, noBaseProb=${diagnostics.selectionsSkipped.noBaseProb}) · data missing: form(h=${diagnostics.dataMissing.homeForm},a=${diagnostics.dataMissing.awayForm}) xG(h=${diagnostics.dataMissing.homeXG},a=${diagnostics.dataMissing.awayXG}) h2h=${diagnostics.dataMissing.h2hMeetings} splits=${diagnostics.dataMissing.splitsMissing.length}/${strategy.enabledMarkets.length}`,
+    );
+  }
+
+  return { candidates, combos, diagnostics };
 };

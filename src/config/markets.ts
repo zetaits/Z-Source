@@ -4,7 +4,7 @@ export const MARKETS: MarketDescriptor[] = [
   { key: "ML_1X2", label: "Match Result (1X2)", group: "main", hasLine: false },
   { key: "DNB", label: "Draw No Bet", group: "main", hasLine: false },
   { key: "AH", label: "Asian Handicap", group: "main", hasLine: true },
-  { key: "OU_GOALS", label: "Total Goals", group: "main", hasLine: true },
+  { key: "OU_GOALS", label: "Totals", group: "main", hasLine: true },
   { key: "BTTS", label: "Both Teams To Score", group: "main", hasLine: false },
   { key: "ML_HT", label: "1H Match Result", group: "main", hasLine: false },
   { key: "CORNERS_TOTAL", label: "Total Corners", group: "secondary", hasLine: true },

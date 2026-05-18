@@ -25,7 +25,17 @@ export const sharpSquareDetector: Rule = {
   id: "sharp-square-detector",
   description:
     "Unified sharp-vs-square pattern detector: RLM, sharp money divergence, public dog trap, pure fade.",
-  markets: ["ML_1X2", "DNB", "BTTS", "OU_GOALS", "AH", "CORNERS_TOTAL"],
+  markets: [
+    "ML_1X2",
+    "DNB",
+    "BTTS",
+    "OU_GOALS",
+    "AH",
+    "CORNERS_TOTAL",
+    "DC",
+    "TTG_HOME",
+    "TTG_AWAY",
+  ],
   leg: "sharpVsSquare",
   defaultWeight: 1,
   run: ({ ctx, selection, price, config }): RuleOutput | null => {

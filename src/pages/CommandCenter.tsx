@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KickoffBadge } from "@/components/domain/KickoffBadge";
+import { KpiCard } from "@/components/domain/KpiCard";
 import { findLeagueById } from "@/config/leagues";
 import type { CatalogMatch } from "@/domain/match";
 import { clvPct, profitMinor } from "@/domain/bet";
@@ -287,69 +288,6 @@ export function CommandCenter() {
         </aside>
       </div>
     </div>
-  );
-}
-
-/* ── KpiCard ────────────────────────────────────────────────────── */
-function KpiCard({
-  label,
-  main,
-  sub,
-  tone,
-  spark,
-}: {
-  label: string;
-  main: string;
-  sub?: string;
-  tone?: "pos" | "neg" | "info" | "warn";
-  spark?: number[];
-}) {
-  const toneColor =
-    tone === "pos" ? "var(--zs-pos)"
-    : tone === "neg" ? "var(--zs-neg)"
-    : tone === "info" ? "var(--zs-info)"
-    : tone === "warn" ? "var(--zs-warn)"
-    : "var(--zs-fg-muted)";
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-lg border border-zs p-4"
-      style={{ background: "var(--zs-bg-elev)" }}
-    >
-      <div className="kicker mb-1">{label}</div>
-      <div className="flex items-end gap-2">
-        <span className="font-mono text-2xl font-semibold tabular-nums text-fg">{main}</span>
-        {spark && spark.length > 2 && (
-          <MiniSpark pts={spark} className="mb-0.5 ml-auto" />
-        )}
-      </div>
-      {sub && (
-        <div className="mt-1 font-mono text-[11px] tabular-nums" style={{ color: toneColor }}>
-          {sub}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MiniSpark({ pts, className }: { pts: number[]; className?: string }) {
-  const min = Math.min(...pts);
-  const max = Math.max(...pts);
-  const range = max - min || 1;
-  const W = 60, H = 22;
-  const points = pts
-    .map((p, i) => `${(i / (pts.length - 1)) * W},${H - ((p - min) / range) * (H - 2) - 1}`)
-    .join(" ");
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={className}>
-      <polyline
-        points={points}
-        fill="none"
-        stroke="var(--zs-pos)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 

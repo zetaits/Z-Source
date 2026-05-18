@@ -26,6 +26,8 @@ export interface ComboLeg {
   baseSelectionId: PlayId;
 }
 
+export type ComboType = "VALUE" | "ANCHOR";
+
 export interface ComboPlay {
   id: PlayId;
   matchId: MatchId;
@@ -37,6 +39,7 @@ export interface ComboPlay {
   verdict: Verdict;
   correlationKey: string;
   rho: number;
+  comboType: ComboType;
   trace: ReasoningEntry[];
   generatedAt: string;
 }

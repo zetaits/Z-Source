@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MatchId, TeamId } from "@/domain/ids";
-import { createSofaScoreHistoryProvider } from "./sofaScoreHistoryProvider";
+import {
+  _resetSofaScoreProviderCachesForTests,
+  createSofaScoreHistoryProvider,
+} from "./sofaScoreHistoryProvider";
 
 vi.mock("@/services/http/httpClient", () => ({
   httpRequest: vi.fn(),
@@ -69,6 +72,7 @@ const finishedEvent = (
 beforeEach(() => {
   mockHttp.mockReset();
   cacheMod.__cacheMap.clear();
+  _resetSofaScoreProviderCachesForTests();
 });
 
 describe("sofaScoreHistoryProvider.getForm", () => {
@@ -287,5 +291,140 @@ describe("sofaScoreHistoryProvider.getIntangibles", () => {
     });
     expect(res.homeRestDays).toBe(4);
     expect(res.awayRestDays).toBe(4);
+  });
+});
+
+describe("sofaScoreHistoryProvider team name resolver", () => {
+  const searchResp = (results: Array<{ id: number; name: string }>) =>
+    okJson({
+      results: results.map((r) => ({
+        type: "team",
+        entity: { id: r.id, name: r.name },
+      })),
+    });
+
+  it("picks best match by similarity when input differs from canonical name", async () => {
+    // searchSofaTeamHits is called for [name, normalized] (deduped). Either
+    // call may be made: respond consistently with the same hit list.
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        return searchResp([
+          { id: 999, name: "Real Madrid" },
+          { id: 42, name: "Rodez AF" },
+          { id: 7, name: "Stade Rodez" },
+        ]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    const form = await p.getForm("t1" as TeamId, 5, {
+      teamName: "Rodez Aveyron Football",
+    });
+    expect(form.games).toEqual([]);
+    // "football" is in SUFFIX_TOKENS so it gets stripped during normalization.
+    const cached = cacheMod.__cacheMap.get(
+      "team-resolve:sofascore:rodez aveyron",
+    ) as { payload: { sofaTeamId: number } } | undefined;
+    expect(cached?.payload.sofaTeamId).toBe(42);
+  });
+
+  it("resolves 'Real Betis Seville' to 'Real Betis' over 'Real Sociedad'", async () => {
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        return searchResp([
+          { id: 100, name: "Real Sociedad" },
+          { id: 200, name: "Real Betis" },
+        ]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    await p.getForm("t1" as TeamId, 5, { teamName: "Real Betis Seville" });
+    const cached = cacheMod.__cacheMap.get(
+      "team-resolve:sofascore:real betis seville",
+    ) as { payload: { sofaTeamId: number } } | undefined;
+    expect(cached?.payload.sofaTeamId).toBe(200);
+  });
+
+  it("logs warning and returns null when best similarity is below threshold", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        return searchResp([{ id: 1, name: "Totally Different Team" }]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    const form = await p.getForm("t1" as TeamId, 5, {
+      teamName: "Some Obscure Club FC",
+    });
+    expect(form.games).toEqual([]);
+    const resolveWarn = warnSpy.mock.calls.find((c) =>
+      String(c[0]).includes("no match"),
+    );
+    expect(resolveWarn).toBeDefined();
+    expect(String(resolveWarn?.[0])).toContain("Some Obscure Club FC");
+    warnSpy.mockRestore();
+  });
+
+  it("reuses cached resolution on subsequent calls without hitting the API", async () => {
+    let searchCalls = 0;
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        searchCalls++;
+        return searchResp([{ id: 42, name: "Rodez AF" }]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    await p.getForm("t1" as TeamId, 5, { teamName: "Rodez Aveyron Football" });
+    const searchCallsAfterFirst = searchCalls;
+    await p.getForm("t1" as TeamId, 5, { teamName: "Rodez Aveyron Football" });
+    expect(searchCalls).toBe(searchCallsAfterFirst);
+  });
+
+  it("retries with token subsets when full query returns no hits (Real Betis Seville case)", async () => {
+    // Simulate SofaScore search returning hits only for the shortened query.
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        // SofaScore returns nothing for "Real Betis Seville" or
+        // "real betis seville" but does return the team for "real betis".
+        if (req.url.includes("q=real%20betis") && !req.url.includes("seville")) {
+          return searchResp([{ id: 555, name: "Real Betis" }]);
+        }
+        return searchResp([]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    await p.getForm("t1" as TeamId, 5, { teamName: "Real Betis Seville" });
+    const cached = cacheMod.__cacheMap.get(
+      "team-resolve:sofascore:real betis seville",
+    ) as { payload: { sofaTeamId: number } } | undefined;
+    expect(cached?.payload.sofaTeamId).toBe(555);
+  });
+
+  it("normalises 'PSG' to 'Paris Saint Germain' via the alias table", async () => {
+    mockHttp.mockImplementation(async (req: { url: string }) => {
+      if (req.url.includes("/search/all")) {
+        return searchResp([
+          { id: 5, name: "Paris Saint-Germain" },
+          { id: 99, name: "AC Milan" },
+        ]);
+      }
+      return okJson({ events: [] });
+    });
+
+    const p = createSofaScoreHistoryProvider();
+    await p.getForm("t1" as TeamId, 5, { teamName: "PSG" });
+    const cached = cacheMod.__cacheMap.get(
+      "team-resolve:sofascore:paris saint germain",
+    ) as { payload: { sofaTeamId: number } } | undefined;
+    expect(cached?.payload.sofaTeamId).toBe(5);
   });
 });

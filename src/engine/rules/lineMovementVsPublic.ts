@@ -6,7 +6,7 @@ export const lineMovementVsPublic: Rule = {
   id: "line-movement-vs-public",
   description:
     "Significant line movement (≥5%) from opener with no splits context. When splits are present, sharpSquareDetector takes over.",
-  markets: ["ML_1X2", "DNB", "AH", "OU_GOALS", "BTTS"],
+  markets: ["ML_1X2", "DNB", "AH", "OU_GOALS", "BTTS", "DC", "TTG_HOME", "TTG_AWAY"],
   leg: "lines",
   defaultWeight: 1,
   run: ({ ctx, selection, price, config }): RuleOutput | null => {

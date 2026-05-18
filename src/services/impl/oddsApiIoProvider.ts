@@ -5,6 +5,7 @@ import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import { httpRequest, HttpError } from "@/services/http/httpClient";
 import { oddsApiIoQuota } from "@/services/http/quotaTracker";
 import type {
+  OddsMovements,
   OddsProvider,
   ProviderEvent,
   QuotaSnapshot,
@@ -13,12 +14,20 @@ import type {
 const IO_BASE = "https://api.odds-api.io/v3";
 
 // Actual market name strings returned by odds-api.io (PascalCase)
+// DC/TTG/BTTS halves: speculative names — odds-api.io free tier likely does not
+// expose these, but a paid feed or future provider could. Adapters skip silently
+// when offers are missing.
 const MARKET_TO_API: Partial<Record<MarketKey, string[]>> = {
   ML_1X2: ["ML", "1X2", "Moneyline", "H2H"],
   AH:     ["Spread", "Asian Handicap", "AH", "Handicap"],
   OU_GOALS: ["Totals", "Goals Over/Under", "Goals O/U", "Over/Under", "Total"],
   BTTS:   ["BTTS", "Both Teams To Score"],
   DNB:    ["DNB", "Draw No Bet"],
+  DC:     ["DC", "Double Chance"],
+  TTG_HOME: ["TTG Home", "Home Team Total Goals", "Home Total"],
+  TTG_AWAY: ["TTG Away", "Away Team Total Goals", "Away Total"],
+  BTTS_1H: ["BTTS 1H", "BTTS 1st Half", "Both Teams To Score 1st Half"],
+  BTTS_2H: ["BTTS 2H", "BTTS 2nd Half", "Both Teams To Score 2nd Half"],
 };
 
 const oddsNum = z
@@ -105,6 +114,72 @@ const resolveMarketKey = (apiName: string): MarketKey | null =>
   ALIAS_TO_MARKET.get(apiName.toLowerCase()) ?? null;
 
 type IoEvent = z.infer<typeof ioEventOddsSchema>;
+
+const MARKET_TO_MOVEMENTS_API: Partial<Record<MarketKey, string>> = {
+  ML_1X2: "ML",
+  AH: "Spread",
+  OU_GOALS: "Totals",
+};
+
+const ioMovementSchema = z
+  .object({
+    home: oddsNum,
+    away: oddsNum,
+    draw: oddsNum,
+    over: oddsNum,
+    under: oddsNum,
+    hdp: z.union([z.string(), z.number()]).optional(),
+    timestamp: z.union([z.number(), z.string().transform((s) => parseInt(s, 10))]).optional(),
+    max: z.union([z.number(), z.string()]).optional(),
+  })
+  .passthrough();
+
+const ioMovementsResponseSchema = z
+  .object({
+    bookmaker: z.string().optional(),
+    eventid: z.union([z.string(), z.number()]).optional(),
+    opening: ioMovementSchema.optional(),
+    latest: ioMovementSchema.optional(),
+    movements: z.array(ioMovementSchema).optional(),
+  })
+  .passthrough();
+
+type IoMovement = z.infer<typeof ioMovementSchema>;
+
+const movementToOffers = (
+  m: IoMovement,
+  marketKey: MarketKey,
+  book: BookId,
+  fallbackLine: number | undefined,
+): BookOffer[] => {
+  const tsRaw = typeof m.timestamp === "number" ? m.timestamp : undefined;
+  const takenAt = tsRaw
+    ? new Date(tsRaw * 1000).toISOString()
+    : new Date().toISOString();
+  const hdpNum =
+    m.hdp !== undefined ? Number(typeof m.hdp === "string" ? m.hdp : m.hdp) : undefined;
+  const line = Number.isFinite(hdpNum) ? (hdpNum as number) : fallbackLine;
+  const offers: BookOffer[] = [];
+  if (marketKey === "ML_1X2") {
+    if (m.home !== undefined)
+      offers.push({ book, selection: { marketKey, side: "home" }, decimal: m.home, takenAt });
+    if (m.away !== undefined)
+      offers.push({ book, selection: { marketKey, side: "away" }, decimal: m.away, takenAt });
+    if (m.draw !== undefined)
+      offers.push({ book, selection: { marketKey, side: "draw" }, decimal: m.draw, takenAt });
+  } else if (marketKey === "AH" && line !== undefined) {
+    if (m.home !== undefined)
+      offers.push({ book, selection: { marketKey, side: "home", line }, decimal: m.home, takenAt });
+    if (m.away !== undefined)
+      offers.push({ book, selection: { marketKey, side: "away", line }, decimal: m.away, takenAt });
+  } else if (marketKey === "OU_GOALS" && line !== undefined) {
+    if (m.over !== undefined)
+      offers.push({ book, selection: { marketKey, side: "over", line }, decimal: m.over, takenAt });
+    if (m.under !== undefined)
+      offers.push({ book, selection: { marketKey, side: "under", line }, decimal: m.under, takenAt });
+  }
+  return offers;
+};
 
 const buildSnapshots = (event: IoEvent, requested: MarketKey[]): LineSnapshot[] => {
   const matchId = String(event.id ?? "") as MatchId;
@@ -253,6 +328,64 @@ export const createOddsApiIoProvider = (
     }
   };
 
+  const fetchEventMovements = async (
+    matchId: MatchId,
+    marketKey: MarketKey,
+    book: BookId,
+    line: number | undefined,
+    signal?: AbortSignal,
+  ): Promise<OddsMovements | null> => {
+    const config = configRef();
+    if (!config?.apiKey) throw new Error("odds-api.io key not configured");
+    const apiMarket = MARKET_TO_MOVEMENTS_API[marketKey];
+    if (!apiMarket) return null;
+
+    const url = `${IO_BASE}/odds/movements${buildQuery({
+      eventId: matchId,
+      apiKey: config.apiKey,
+      bookmaker: normalizeBook(String(book)),
+      market: apiMarket,
+      marketLine: line !== undefined ? String(line) : undefined,
+    })}`;
+
+    try {
+      const res = await httpRequest({
+        url,
+        rps: 0.5,
+        headers: { Accept: "application/json" },
+        signal,
+      });
+      oddsApiIoQuota.observeHeaders(res.headers);
+      oddsApiIoQuota.recordRequest();
+      const json = await res.json();
+      const parsed = ioMovementsResponseSchema.safeParse(json);
+      if (!parsed.success) {
+        console.warn("[odds-api.io] movements zod parse failed", parsed.error.issues.slice(0, 3));
+        return null;
+      }
+      const data = parsed.data;
+      const opener = data.opening
+        ? movementToOffers(data.opening, marketKey, book, line)
+        : [];
+      const latest = data.latest
+        ? movementToOffers(data.latest, marketKey, book, line)
+        : [];
+      const movements = (data.movements ?? []).map((m) =>
+        movementToOffers(m, marketKey, book, line),
+      );
+      return { opener, latest, movements };
+    } catch (err) {
+      if (err instanceof HttpError) {
+        if (err.status === 401 || err.status === 403)
+          throw new Error("odds-api.io rejected the API key (401/403)");
+        if (err.status === 429)
+          throw new Error("odds-api.io rate limit reached (429)");
+        if (err.status === 404) return null;
+      }
+      throw err;
+    }
+  };
+
   const listEvents = async (_sportKey: string, signal?: AbortSignal): Promise<ProviderEvent[]> => {
     const config = configRef();
     if (!config?.apiKey) throw new Error("odds-api.io key not configured");
@@ -308,6 +441,9 @@ export const createOddsApiIoProvider = (
     async snapshotOpeners(matchId, context) {
       const snaps = await fetchEventOdds(matchId, ["ML_1X2", "OU_GOALS", "AH"], context?.signal);
       return snaps.map((s) => ({ ...s, isOpener: true }));
+    },
+    async getMovements(matchId, marketKey, book, line, context) {
+      return fetchEventMovements(matchId, marketKey, book, line, context?.signal);
     },
     async listEvents(sportKey) {
       return listEvents(sportKey);

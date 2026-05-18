@@ -61,13 +61,35 @@ export interface ComboPolicy {
   minCombinedDecimal: number;
   minCombinedEdge: number;
   minCombinedFairProb: number;
+  anchorMode: AnchorComboPolicy;
 }
+
+export interface AnchorComboPolicy {
+  enabled: boolean;
+  minBaseConfidence: number;
+  maxBaseDecimal: number;
+  minAnchorConfidence: number;
+  minRho: number;
+  targetMinDecimal: number;
+  targetMaxDecimal: number;
+}
+
+export const DEFAULT_ANCHOR_POLICY: AnchorComboPolicy = {
+  enabled: true,
+  minBaseConfidence: 0.65,
+  maxBaseDecimal: 1.55,
+  minAnchorConfidence: 0.5,
+  minRho: 0.15,
+  targetMinDecimal: 1.6,
+  targetMaxDecimal: 2.2,
+};
 
 export const DEFAULT_COMBO_POLICY: ComboPolicy = {
   enabled: true,
   minCombinedDecimal: 1.65,
   minCombinedEdge: 0.04,
   minCombinedFairProb: 0.45,
+  anchorMode: DEFAULT_ANCHOR_POLICY,
 };
 
 export interface StrategyConfig {

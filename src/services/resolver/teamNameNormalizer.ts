@@ -11,7 +11,7 @@ const SUFFIX_TOKENS = new Set([
   // French
   "ogc", "losc", "asse",
   // Generic
-  "club", "deportivo", "athletic",
+  "club", "deportivo", "athletic", "football",
 ]);
 
 // Connector words, articles, and other linguistic noise.
@@ -134,4 +134,14 @@ export const teamSimilarity = (a: string, b: string): number => {
   const fullScore = jaroWinkler(na, nb);
   if (allStrong) return Math.max(containment, fullScore);
   return Math.max(fullScore, containment * 0.7);
+};
+
+/**
+ * Token-significant breakdown of a normalised team name. Useful for retrying
+ * provider searches with shorter sub-strings when the full name returns zero
+ * hits (e.g. "real betis seville" → ["real betis", "betis seville", ...]).
+ */
+export const normalizedTokens = (raw: string): string[] => {
+  const normalized = normalizeTeamName(raw);
+  return normalized ? normalized.split(" ").filter((t) => t.length > 0) : [];
 };

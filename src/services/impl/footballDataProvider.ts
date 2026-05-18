@@ -173,7 +173,7 @@ export const fetchFdorgH2H = async (
   homeFdorgTeamId: number,
   homeId: TeamId,
   awayId: TeamId,
-  limit = 10,
+  limit = 30,
 ): Promise<H2H | null> => {
   const url = `${FDORG_BASE}/matches/${fdorgMatchId}/head2head?limit=${limit}`;
   const data = await fdorgFetch(url, apiKey, fdorgH2HResponseSchema);

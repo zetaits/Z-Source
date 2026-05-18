@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Z-Source · UI/UX Proposal</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter-tight@5.0.16/400.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter-tight@5.0.16/500.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter-tight@5.0.16/600.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter-tight@5.0.16/700.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.19/400.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.19/500.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.19/600.css" />
+
+<link rel="stylesheet" href="tokens.css" />
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+  /* Cover above the canvas */
+  .cover {
+    padding: 56px 80px;
+    background: var(--zs-bg);
+    color: var(--zs-fg);
+    border-bottom: 1px solid var(--zs-border);
+    max-width: 1280px;
+  }
+  .cover h1 { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .cover .lede { color: var(--zs-fg-dim); font-size: 16px; max-width: 720px; line-height: 1.5; margin: 0 0 32px; }
+  .cover h2 { font-size: 14px; font-weight: 600; margin: 24px 0 12px; color: var(--zs-fg); display: flex; align-items: baseline; gap: 10px; }
+  .cover h2::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 99px; background: var(--zs-info); }
+  .cover ul { margin: 0; padding-left: 18px; color: var(--zs-fg-dim); font-size: 13.5px; line-height: 1.7; }
+  .cover ul li b { color: var(--zs-fg); font-weight: 500; }
+  .cover .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 16px; }
+  .cover .pain { background: var(--zs-bg-elev); border: 1px solid var(--zs-border); border-left: 3px solid var(--zs-warn); border-radius: 6px; padding: 16px 18px; }
+  .cover .pain .kicker { color: var(--zs-warn); margin-bottom: 6px; }
+  .cover .pain p { margin: 0; color: var(--zs-fg-dim); font-size: 13px; line-height: 1.55; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Z-Source — Recomendaciones UI/UX</h1>
+  <p class="lede">
+    Propuesta enfocada en los dos puntos que mencionaste (visibilidad de cuotas en Match Detail · perspectiva en H2H) más algunas mejoras adyacentes que rompen el mismo principio: <em>nunca enterrar la información que el usuario va a buscar primero.</em>
+  </p>
+
+  <div class="grid2">
+    <div class="pain">
+      <div class="kicker">Pain · Picks tab</div>
+      <p>Hoy las cuotas de los mercados solo aparecen embebidas dentro de la <code>PlayCard</code> del pick. Si no hay pick, no se ven. Si hay pick, solo ves el del jugador recomendado, no el resto del mercado.</p>
+    </div>
+    <div class="pain">
+      <div class="kicker">Pain · Matchup H2H</div>
+      <p>El badge "W" / "L" se calcula desde la perspectiva del equipo local actual sin decirlo en ningún sitio. Si abres un partido nuevo donde los roles cambian (eran visitantes en H2H pasados), la lectura es ambigua.</p>
+    </div>
+  </div>
+
+  <h2>Cambios principales propuestos</h2>
+  <ul>
+    <li><b>Odds board persistente</b> en Picks tab: grid de mercado-por-mercado con la mejor cuota visible siempre, picks resaltados in-place, expandible a todas las casas.</li>
+    <li><b>Estado "no hay picks" rediseñado</b>: el banner pasa a ser una franja informativa, debajo aparece el board y un rail de "selecciones más cercanas al threshold" con el edge negativo explícito.</li>
+    <li><b>H2H con toggle de perspectiva</b> (home / neutral / away). En modo neutral mostramos quién ganó por nombre, no W/L. La fila visualiza casa/visitante de cada partido pasado para que no haya dudas.</li>
+    <li><b>Pattern signals</b> debajo del H2H: en vez de hacer que el usuario calcule mentalmente "BTTS rate" o "promedio de goles", el sistema lo extrae.</li>
+  </ul>
+
+  <h2>Bonus (si quieres profundizar)</h2>
+  <ul>
+    <li><b>KPI strip en el header</b>: 6 señales (picks, sharp move, public side, KEY injuries, rest, weather) leíbles antes de cambiar de tab.</li>
+    <li><b>Lines tab opener-vs-now</b>: tarjeta por selección con delta de probabilidad implícita, complementando la gráfica de movimiento.</li>
+  </ul>
+
+  <h2>Cómo leer las pantallas</h2>
+  <ul>
+    <li>Bandas <span style="color: var(--zs-pos)">verdes</span> = cambios concretos respecto al estado actual.</li>
+    <li>Bandas <span style="color: var(--zs-info)">azules</span> = ideas adicionales / contexto.</li>
+    <li>Datos son ficticios — la jerarquía y el layout son lo que importa.</li>
+  </ul>
+</div>
+
+<script type="text/babel" src="odds-board.jsx"></script>
+<script type="text/babel" src="picks-frames.jsx"></script>
+<script type="text/babel" src="matchup-frames.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  const root = ReactDOM.createRoot(document.getElementById('canvas-mount'));
+
+  function App() {
+    return (
+      <DesignCanvas title="Z-Source · Match Detail UI/UX proposal" subtitle="Mockups for the issues you raised + adjacent UX upgrades">
+        <DCSection id="primary" title="Primary fixes" subtitle="Direct responses to the two issues you mentioned">
+          <DCArtboard id="picks-with" label="Picks · terminal-style odds board (with picks)" width={1280} height={1100}>
+            <window.PicksFrameWithPicks />
+          </DCArtboard>
+          <DCArtboard id="picks-without" label="Picks · no picks · 'all books' view expanded" width={1280} height={1100}>
+            <window.PicksFrameNoPicks />
+          </DCArtboard>
+          <DCArtboard id="matchup" label="Matchup tab · perspective-aware H2H" width={1280} height={1380}>
+            <window.MatchupFrame />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="bonus" title="Bonus upgrades" subtitle="Adjacent ideas that follow the same principle: surface signals, don't bury them">
+          <DCArtboard id="header" label="Header · at-a-glance KPI strip" width={1280} height={420}>
+            <window.HeaderUpgradeFrame />
+          </DCArtboard>
+          <DCArtboard id="lines" label="Lines tab · opener-vs-now compare" width={1280} height={780}>
+            <window.LinesUpgradeFrame />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  root.render(<App />);
+</script>
+
+<div id="canvas-mount" style="min-height: 100vh"></div>
+
+</body>
+</html>

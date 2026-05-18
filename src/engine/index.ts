@@ -1,6 +1,6 @@
 export { runBondedAnalysis } from "./pipeline";
-export type { RunOptions, BondedAnalysisResult } from "./pipeline";
-export { enumerateCombos } from "./combos";
+export type { RunOptions, BondedAnalysisResult, AnalysisDiagnostics } from "./pipeline";
+export { enumerateAnchorCombos, enumerateCombos } from "./combos";
 export { combine } from "./combine";
 export type { CombinedSignal } from "./combine";
 export { sizeStakeUnits, kellyFraction } from "./stake";

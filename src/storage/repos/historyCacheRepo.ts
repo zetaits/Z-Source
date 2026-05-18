@@ -50,7 +50,7 @@ export const formCacheKey = (teamId: number, lastN: number): string =>
 
 export const h2hCacheKey = (homeId: number, awayId: number): string => {
   const [a, b] = [homeId, awayId].sort((x, y) => x - y);
-  return `h2h:${a}:${b}`;
+  return `h2h-v2:${a}:${b}`;
 };
 
 export const intangiblesCacheKey = (matchId: string): string =>

@@ -32,6 +32,12 @@ const YES_NO: SideOption[] = [
   { value: "no", label: "No" },
 ];
 
+const DC_SIDES: SideOption[] = [
+  { value: "1X", label: "Home or Draw (1X)" },
+  { value: "12", label: "Home or Away (12)" },
+  { value: "X2", label: "Draw or Away (X2)" },
+];
+
 export const MARKET_SIDES: Record<MarketKey, MarketSidesConfig> = {
   ML_1X2: { sides: HOME_DRAW_AWAY, hasLine: false },
   ML_HT: { sides: HOME_DRAW_AWAY, hasLine: false },
@@ -39,6 +45,11 @@ export const MARKET_SIDES: Record<MarketKey, MarketSidesConfig> = {
   AH: { sides: HOME_AWAY, hasLine: true, lineHint: "−0.5, +1, +1.25…" },
   OU_GOALS: { sides: OVER_UNDER, hasLine: true, lineHint: "1.5, 2.5, 3.5…" },
   BTTS: { sides: YES_NO, hasLine: false },
+  BTTS_1H: { sides: YES_NO, hasLine: false },
+  BTTS_2H: { sides: YES_NO, hasLine: false },
+  DC: { sides: DC_SIDES, hasLine: false },
+  TTG_HOME: { sides: OVER_UNDER, hasLine: true, lineHint: "0.5, 1.5, 2.5…" },
+  TTG_AWAY: { sides: OVER_UNDER, hasLine: true, lineHint: "0.5, 1.5, 2.5…" },
   CORNERS_TOTAL: { sides: OVER_UNDER, hasLine: true, lineHint: "8.5, 9.5, 10.5…" },
   CORNERS_TEAM: { sides: HOME_AWAY, hasLine: true, lineHint: "Team line, e.g. 4.5" },
   CARDS_TOTAL: { sides: OVER_UNDER, hasLine: true, lineHint: "3.5, 4.5…" },

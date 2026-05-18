@@ -211,10 +211,240 @@
   .pill-sharp { background: var(--zs-sharp-fill); color: var(--zs-sharp); border-color: color-mix(in oklch, var(--zs-sharp) 30%, transparent); }
   .pill-ghost { background: transparent; color: var(--zs-fg-dim); border-color: var(--zs-border); }
 
+  /* Engine Scan animations (MatchDetail loading overlay) */
+  @keyframes zs-scan-sweep {
+    0%   { top: 0%;   opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+  @keyframes zs-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes zs-edge-pulse {
+    0%   { transform: scaleX(0); transform-origin: left; }
+    60%  { transform: scaleX(1); transform-origin: left; }
+    61%  { transform: scaleX(1); transform-origin: right; }
+    100% { transform: scaleX(0); transform-origin: right; }
+  }
+  @keyframes zs-ticker {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  @keyframes zs-pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(1.25); }
+  }
+  @keyframes zs-stage-flash {
+    0%   { background: var(--zs-pos-fill); }
+    100% { background: transparent; }
+  }
+
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklch, var(--zs-info) 0%, transparent) 0%,
+      color-mix(in oklch, var(--zs-info) 60%, transparent) 50%,
+      color-mix(in oklch, var(--zs-info) 0%, transparent) 100%
+    );
+    animation: zs-scan-sweep 2.4s linear infinite;
+    z-index: 2;
+  }
+
+  .shimmer {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklch, var(--zs-fg) 8%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: zs-shimmer 1.6s linear infinite;
+  }
+
+  .edge-bar-pulse > span {
+    animation: zs-edge-pulse 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .ticker {
+    display: flex;
+    gap: 24px;
+    white-space: nowrap;
+    animation: zs-ticker 14s linear infinite;
+  }
+
+  .pulse-dot { animation: zs-pulse-dot 1.1s ease-in-out infinite; }
+
+  .stage-row.flash { animation: zs-stage-flash 700ms ease-out; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scan-line,
+    .shimmer,
+    .edge-bar-pulse > span,
+    .ticker,
+    .pulse-dot,
+    .stage-row.flash {
+      animation: none !important;
+    }
+    .scan-line { display: none; }
+  }
+
+  /* hour-strip: 24 micro-dots for per-hour kickoff density (Scanner KpiCard) */
+  .hour-strip {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 2px;
+    align-items: center;
+  }
+  .hour-dot {
+    display: block;
+    height: 3px;
+    border-radius: 99px;
+    background: color-mix(in oklch, var(--zs-border) 80%, transparent);
+  }
+  .hour-dot.lit { background: var(--zs-info); }
+
+  /* tier accent bar on league card left edge */
+  .league-accent {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 0;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+  }
+  .league-accent.top    { background: var(--zs-info); }
+  .league-accent.cont   { background: var(--zs-sharp); }
+  .league-accent.other  { background: var(--zs-border-bright); }
+
   .ind { width: 7px; height: 7px; border-radius: 99px; display: inline-block; }
   .ind-pos   { background: var(--zs-pos); }
   .ind-neg   { background: var(--zs-neg); }
   .ind-info  { background: var(--zs-info); }
   .ind-warn  { background: var(--zs-warn); }
   .ind-sharp { background: var(--zs-sharp); }
+
+  /* Z-Source themed scrollbar — opt-in via `.zs-scroll` */
+  .zs-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--zs-border) 90%, transparent)
+      transparent;
+  }
+  .zs-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .zs-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .zs-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--zs-border) 90%, transparent);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 99px;
+  }
+  .zs-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--zs-border-bright);
+    background-clip: padding-box;
+  }
+  .zs-scroll::-webkit-scrollbar-thumb:active {
+    background: var(--zs-fg-muted);
+    background-clip: padding-box;
+  }
+  .zs-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Odds board grid — Picks tab */
+  .odds-grid {
+    display: grid;
+    gap: 1px;
+    background: var(--zs-border);
+    border: 1px solid var(--zs-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .odds-grid > * { background: var(--zs-bg-elev); }
+  .odds-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  .odds-cell .lab { font-family: var(--font-mono); font-size: 10px; color: var(--zs-fg-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .odds-cell .val { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--zs-fg); font-variant-numeric: tabular-nums; }
+  .odds-cell .sub { font-family: var(--font-mono); font-size: 10px; color: var(--zs-fg-muted); }
+  .odds-cell.best { background: color-mix(in oklch, var(--zs-info) 8%, var(--zs-bg-elev)); }
+  .odds-cell.best .val { color: var(--zs-info); }
+  .odds-cell.picked {
+    background: color-mix(in oklch, var(--zs-pos) 12%, var(--zs-bg-elev));
+    position: relative;
+  }
+  .odds-cell.picked .val { color: var(--zs-pos); }
+  .odds-cell.picked::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    border: 1.5px solid var(--zs-pos);
+  }
+  .book-pip {
+    display: inline-block; width: 5px; height: 5px; border-radius: 99px;
+    background: var(--zs-fg-muted); margin-right: 6px; vertical-align: middle;
+  }
+  .edge-bar {
+    height: 4px; background: var(--zs-surface); border-radius: 99px; overflow: hidden;
+  }
+  .edge-bar > span { display: block; height: 100%; }
+
+  /* H2H perspective rows — Matchup tab */
+  .h2h-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 100px 1fr 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .h2h-score {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .h2h-team { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .h2h-team .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h2h-team.winner .name { color: var(--zs-fg); font-weight: 600; }
+  .h2h-team.loser  .name { color: var(--zs-fg-muted); }
+  .h2h-team.right  { justify-content: flex-end; flex-direction: row-reverse; }
+  .h2h-team .crest {
+    width: 18px; height: 18px; border-radius: 3px; flex-shrink: 0;
+    background: repeating-linear-gradient(45deg, var(--zs-surface), var(--zs-surface) 3px, var(--zs-surface-2) 3px, var(--zs-surface-2) 6px);
+    border: 1px solid var(--zs-border);
+  }
+  .h2h-outcome {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 11px;
+    padding: 3px 8px; border-radius: 4px; border: 1px solid;
+  }
+  .h2h-date { font-family: var(--font-mono); font-size: 11px; color: var(--zs-fg-muted); }
+
+  /* Share-of-meetings bar */
+  .share-bar {
+    display: grid;
+    grid-template-columns: var(--home-pct) var(--draw-pct) var(--away-pct);
+    height: 8px; border-radius: 4px; overflow: hidden;
+    background: var(--zs-surface);
+  }
+  .share-bar > span:nth-child(1) { background: var(--zs-info); }
+  .share-bar > span:nth-child(2) { background: var(--zs-fg-muted); opacity: 0.4; }
+  .share-bar > span:nth-child(3) { background: var(--zs-warn); }
 }

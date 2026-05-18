@@ -27,6 +27,18 @@ pub fn run() {
             sql: include_str!("../../../src/storage/migrations/004_history_cache.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "pick_outcomes",
+            sql: include_str!("../../../src/storage/migrations/005_pick_outcomes.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 6,
+            description: "historical_odds",
+            sql: include_str!("../../../src/storage/migrations/006_historical_odds.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
