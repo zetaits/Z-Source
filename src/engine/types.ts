@@ -20,6 +20,9 @@ export interface RuleOutput {
   weight: number;
   message: string;
   data?: Record<string, unknown>;
+  /** Optional family tag for decorrelation. Rules of the same family in the
+   * same leg get a 1/√N discount applied to their contributions in combine(). */
+  family?: string;
 }
 
 export interface RuleContext {

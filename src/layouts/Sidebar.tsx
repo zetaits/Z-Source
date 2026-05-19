@@ -1,59 +1,55 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Radar,
-  Wallet,
-  SlidersHorizontal,
-  Settings as SettingsIcon,
-  FlaskConical,
-  LineChart,
-  History,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { resolveProviders } from "@/services/providers/factory";
 import type { QuotaTracker } from "@/services/http/quotaTracker";
 import type { QuotaSnapshot } from "@/services/providers/OddsProvider";
 
-type Group = { label: string; items: readonly NavItemDef[] };
-type NavItemDef = { to: string; label: string; icon: LucideIcon; end: boolean };
+interface NavItemDef { to: string; label: string; shortcut: string; end: boolean }
+interface Group { section: string; items: readonly NavItemDef[] }
 
-const WORK: Group = {
-  label: "Work",
-  items: [
-    { to: "/", label: "Command Center", icon: LayoutDashboard, end: true },
-    { to: "/scanner", label: "Scanner", icon: Radar, end: false },
-  ],
-};
-
-const PERFORMANCE: Group = {
-  label: "Performance",
-  items: [
-    { to: "/bankroll", label: "Bankroll", icon: Wallet, end: false },
-    { to: "/metrics", label: "Metrics", icon: LineChart, end: false },
-    { to: "/backtest", label: "Backtest", icon: History, end: false },
-    { to: "/strategy", label: "Strategy", icon: SlidersHorizontal, end: false },
-    { to: "/settings", label: "Settings", icon: SettingsIcon, end: false },
-  ],
-};
-
-const DEV: Group = {
-  label: "Dev",
-  items: [
-    { to: "/__engine-playground", label: "Engine Playground", icon: FlaskConical, end: false },
-  ],
-};
+const GROUPS: readonly Group[] = [
+  {
+    section: "WORK",
+    items: [
+      { to: "/",        label: "COMMAND",    shortcut: "1", end: true },
+      { to: "/scanner", label: "SCANNER",    shortcut: "2", end: false },
+    ],
+  },
+  {
+    section: "PERFORMANCE",
+    items: [
+      { to: "/bankroll", label: "BANKROLL", shortcut: "3", end: false },
+      { to: "/metrics",  label: "METRICS",  shortcut: "4", end: false },
+      { to: "/strategy", label: "STRATEGY", shortcut: "5", end: false },
+    ],
+  },
+  {
+    section: "CFG",
+    items: [
+      { to: "/settings", label: "SETTINGS", shortcut: "6", end: false },
+    ],
+  },
+];
 
 export function Sidebar() {
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-zs bg-zs-bg">
+    <aside
+      style={{
+        width: 220,
+        flex: "0 0 220px",
+        height: "100%",
+        background: "var(--zs-bg)",
+        borderRight: "1px solid var(--zs-border)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <LogoBlock />
-      <nav className="flex flex-1 flex-col gap-1 p-3 overflow-y-auto">
-        <NavGroup group={WORK} />
-        <NavGroup group={PERFORMANCE} />
-        {import.meta.env.DEV && <NavGroup group={DEV} />}
+      <nav style={{ flex: 1, padding: "14px 0", overflow: "auto" }} className="zs-scroll">
+        {GROUPS.map((g) => (
+          <NavGroup key={g.section} group={g} />
+        ))}
       </nav>
       <ProviderStrip />
     </aside>
@@ -62,18 +58,37 @@ export function Sidebar() {
 
 function LogoBlock() {
   return (
-    <div className="flex h-14 items-center gap-2.5 border-b border-zs px-4">
-      <div className="flex size-7 items-center justify-center rounded-md bg-info-fill font-display text-base text-info"
-           style={{ border: "1px solid color-mix(in oklch, var(--zs-info) 40%, transparent)" }}>
-        Z
-      </div>
-      <div className="flex flex-col leading-tight">
-        <span className="font-mono text-[11px] font-semibold tracking-[0.05em] text-fg">
-          Z-SOURCE
-        </span>
-        <span className="font-mono text-[9px] tracking-[0.1em] text-fg-muted">
-          EV+ TERMINAL
-        </span>
+    <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid var(--zs-border)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            background: "var(--zs-accent)",
+            color: "var(--zs-bg)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: "var(--font-display)",
+            fontWeight: 900,
+            fontSize: 22,
+            letterSpacing: "-0.04em",
+          }}
+        >
+          Z
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-display)",
+            fontWeight: 800,
+            fontSize: 18,
+            letterSpacing: "-0.01em",
+            lineHeight: 1,
+            color: "var(--zs-fg)",
+          }}
+        >
+          Z—SOURCE
+        </div>
       </div>
     </div>
   );
@@ -81,12 +96,22 @@ function LogoBlock() {
 
 function NavGroup({ group }: { group: Group }) {
   return (
-    <>
-      <div className="kicker px-2.5 pb-1 pt-2 text-[9px]">{group.label}</div>
+    <div style={{ marginBottom: 18 }}>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 9,
+          color: "var(--zs-fg-muted)",
+          letterSpacing: "0.20em",
+          padding: "0 18px 8px",
+        }}
+      >
+        ── {group.section} ──
+      </div>
       {group.items.map((item) => (
         <NavItem key={item.to} item={item} />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -95,29 +120,34 @@ function NavItem({ item }: { item: NavItemDef }) {
     <NavLink
       to={item.to}
       end={item.end}
-      className={({ isActive }) =>
-        cn(
-          "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12.5px] transition-colors",
-          isActive
-            ? "bg-zs-surface text-fg font-medium"
-            : "text-fg-dim hover:bg-zs-surface hover:text-fg",
-        )
-      }
+      style={({ isActive }) => ({
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        padding: "8px 18px",
+        background: isActive ? "var(--zs-accent-fill)" : "transparent",
+        borderLeft: isActive ? "2px solid var(--zs-accent)" : "2px solid transparent",
+        color: isActive ? "var(--zs-accent)" : "var(--zs-fg-dim)",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+        fontWeight: isActive ? 700 : 500,
+        letterSpacing: "0.08em",
+        textAlign: "left",
+        textDecoration: "none",
+      })}
     >
       {({ isActive }) => (
         <>
-          {isActive && (
-            <span
-              aria-hidden
-              className="absolute -left-3 top-1.5 bottom-1.5 w-0.5 rounded-full"
-              style={{ background: "var(--zs-info)" }}
-            />
-          )}
-          <item.icon
-            className={cn("size-4 shrink-0", isActive ? "text-info" : "text-fg-muted")}
-            aria-hidden
-          />
-          <span className="truncate">{item.label}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: isActive ? "var(--zs-accent)" : "var(--zs-fg-faint)" }}>
+              {isActive ? "▸" : " "}
+            </span>
+            {item.label}
+          </span>
+          <span style={{ fontSize: 9, color: "var(--zs-fg-faint)", fontFamily: "var(--font-mono)" }}>
+            {item.shortcut}
+          </span>
         </>
       )}
     </NavLink>
@@ -130,21 +160,34 @@ function ProviderStrip() {
     () => (settings ? resolveProviders(settings).quotaTrackers : []),
     [settings],
   );
-  if (trackers.length === 0) {
-    return (
-      <div className="border-t border-zs p-3 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-        v0.1.0 · scaffold
-      </div>
-    );
-  }
+
   return (
-    <div className="border-t border-zs p-3">
-      <div className="kicker mb-1.5">Providers</div>
-      <div className="flex flex-col gap-0.5">
-        {trackers.map((t) => (
-          <ProviderRow key={t.providerId} tracker={t} />
-        ))}
+    <div style={{ borderTop: "1px solid var(--zs-border)", padding: "12px 18px" }}>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 9,
+          color: "var(--zs-fg-muted)",
+          letterSpacing: "0.18em",
+          marginBottom: 8,
+        }}
+      >
+        ── FEEDS ──
       </div>
+      {trackers.length === 0 ? (
+        <div
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "var(--zs-fg-muted)",
+            letterSpacing: "0.10em",
+          }}
+        >
+          v0.1.0 · scaffold
+        </div>
+      ) : (
+        trackers.slice(0, 4).map((t) => <ProviderRow key={t.providerId} tracker={t} />)
+      )}
     </div>
   );
 }
@@ -153,24 +196,43 @@ function ProviderRow({ tracker }: { tracker: QuotaTracker }) {
   const [snap, setSnap] = useState<QuotaSnapshot>(() => tracker.snapshot());
   useEffect(() => tracker.subscribe(setSnap), [tracker]);
 
-  const { tone, display } = useMemo(() => {
+  const display = useMemo(() => {
     const rem = snap.remaining;
     const cap = tracker.capacity;
-    if (rem === null || cap === null) {
-      return { tone: "warn" as const, display: "—" };
-    }
+    if (rem === null || cap === null) return "—";
+    return `${rem}/${cap}`;
+  }, [snap, tracker]);
+
+  const tone = useMemo(() => {
+    const rem = snap.remaining;
+    const cap = tracker.capacity;
+    if (rem === null || cap === null) return "var(--zs-fg-muted)";
     const ratio = rem / cap;
-    const t: "pos" | "warn" | "neg" = ratio <= 0.1 ? "neg" : ratio <= 0.25 ? "warn" : "pos";
-    return { tone: t, display: `${rem}/${cap}` };
+    return ratio <= 0.1 ? "var(--zs-neg)" : ratio <= 0.25 ? "var(--zs-accent)" : "var(--zs-pos)";
   }, [snap, tracker]);
 
   return (
-    <div className="flex items-center justify-between py-0.5">
-      <div className="flex items-center gap-2">
-        <span className={cn("ind", `ind-${tone}`)} aria-hidden />
-        <span className="font-mono text-[10.5px] text-fg-dim">{tracker.label}</span>
-      </div>
-      <span className="font-mono text-[10px] tabular-nums text-fg-muted">{display}</span>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        fontFamily: "var(--font-mono)",
+        fontSize: 10,
+        marginBottom: 4,
+      }}
+    >
+      <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--zs-fg-dim)", minWidth: 0 }}>
+        <span
+          className="zs-pulse"
+          style={{ width: 5, height: 5, background: tone, flexShrink: 0 }}
+          aria-hidden
+        />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {tracker.label}
+        </span>
+      </span>
+      <span style={{ color: "var(--zs-fg)" }}>{display}</span>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { ThemeProvider } from "next-themes";
 import { RouterProvider } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { TweaksProvider } from "@/features/tweaks/TweaksContext";
 import { queryClient } from "@/services/cache/queryClient";
 import { router } from "@/router";
 
@@ -10,10 +11,12 @@ function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider delayDuration={150}>
-          <RouterProvider router={router} />
-          <Toaster />
-        </TooltipProvider>
+        <TweaksProvider>
+          <TooltipProvider delayDuration={150}>
+            <RouterProvider router={router} />
+            <Toaster />
+          </TooltipProvider>
+        </TweaksProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

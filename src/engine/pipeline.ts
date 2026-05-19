@@ -5,7 +5,12 @@ import { DEFAULT_COMBO_POLICY } from "@/domain/strategy";
 import type { ReasoningEntry } from "@/domain/trace";
 import type { AnalysisContext } from "./context";
 import { combine, type BondedMeta } from "./combine";
-import { enumerateAnchorCombos, enumerateCombos } from "./combos";
+import {
+  enumerateAnchorCombos,
+  enumerateCombos,
+  type AnchorDiagnostics,
+  type ComboDiagnostics,
+} from "./combos";
 import { clamp, edgePct } from "./ev";
 import { MARKET_ADAPTERS } from "./markets";
 import { RULES } from "./rules";
@@ -28,6 +33,8 @@ export interface AnalysisDiagnostics {
     h2hMeetings: number;
     intangibles: boolean;
   };
+  combos?: ComboDiagnostics;
+  anchorCombos?: AnchorDiagnostics;
 }
 
 export interface BondedAnalysisResult {
@@ -158,7 +165,12 @@ export const runBondedAnalysis = (
       const policy = strategy.stakePolicy;
       const meetsThreshold =
         edge >= policy.minEdgePct && combined.confidence >= policy.minConfidence;
-      const stakeUnits = meetsThreshold
+
+      const bonded =
+        combined.meta.positiveLegsCount >= strategy.minLegsAlignedForBonded &&
+        !combined.meta.negativeStrong;
+
+      const baseStake = meetsThreshold
         ? sizeStakeUnits({
             policy,
             fairProb: combined.fairProb,
@@ -167,10 +179,8 @@ export const runBondedAnalysis = (
             unitBankrollFraction: ctx.unitBankrollFraction,
           })
         : 0;
-
-      const bonded =
-        combined.meta.positiveLegsCount >= strategy.minLegsAlignedForBonded &&
-        !combined.meta.negativeStrong;
+      const unbondedFactor = policy.unbondedFactor ?? 0.5;
+      const stakeUnits = bonded ? baseStake : baseStake * unbondedFactor;
 
       const bookFilterFallback =
         ctx.userBooks.length > 0 && !ctx.userBooks.includes(price.book);
@@ -235,13 +245,15 @@ export const runBondedAnalysis = (
   candidates.sort((a, b) => b.edgePct * b.confidence - a.edgePct * a.confidence);
 
   const comboPolicy = ctx.strategy.comboPolicy ?? DEFAULT_COMBO_POLICY;
-  const valueCombos = enumerateCombos(candidates, comboPolicy, ctx.generatedAt);
-  const anchorCombos = enumerateAnchorCombos(
+  const valueResult = enumerateCombos(candidates, comboPolicy, ctx.generatedAt);
+  const anchorResult = enumerateAnchorCombos(
     candidates,
     comboPolicy.anchorMode,
     ctx.generatedAt,
   );
-  const combos = [...valueCombos, ...anchorCombos];
+  const combos = [...valueResult.combos, ...anchorResult.combos];
+  diagnostics.combos = valueResult.diagnostics;
+  diagnostics.anchorCombos = anchorResult.diagnostics;
 
   if (typeof console !== "undefined" && console.debug) {
     const rulesActive = activeRules.length;

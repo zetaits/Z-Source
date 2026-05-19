@@ -14,6 +14,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { queryClient } from "@/services/cache/queryClient";
+import {
+  fetchFdorgWindowFixtures,
+  fetchOddsApiIoWindowFixtures,
+  fetchSofaRemainingWindowFixtures,
+} from "@/services/catalog/windowFixtures";
 import { getStorage, isPersistentStorage } from "@/storage";
 
 interface Counts {
@@ -46,8 +51,17 @@ export function CacheResetCard() {
       await queryClient.invalidateQueries({ queryKey: ["match"] });
       await queryClient.invalidateQueries({ queryKey: ["analysis"] });
       await queryClient.invalidateQueries({ queryKey: ["scanner"] });
+      await queryClient.invalidateQueries({ queryKey: ["commandCenter", "fixtures"] });
+
+      const refetched = await Promise.all([
+        fetchFdorgWindowFixtures().catch(() => []),
+        fetchOddsApiIoWindowFixtures().catch(() => []),
+        fetchSofaRemainingWindowFixtures().catch(() => []),
+      ]);
+      const repopulated = refetched.reduce((sum, list) => sum + list.length, 0);
+
       toast.success("Caches cleared", {
-        description: `matches ${counts.matches} · history ${counts.history} · splits ${counts.splits}. Re-open the Scanner to refetch fixtures.`,
+        description: `matches ${counts.matches} · history ${counts.history} · splits ${counts.splits}. Refetched ${repopulated} fixtures.`,
       });
       setOpen(false);
     } catch (err) {

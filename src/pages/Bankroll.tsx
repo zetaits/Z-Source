@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertCircle, Minus, Plus, Settings as SettingsIcon, Wallet } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Block, EquityChart, ScreenHeader, Stat } from "@/components/zs";
 import { isPersistentStorage } from "@/storage";
 import {
   useBankrollSettings,
@@ -14,13 +13,12 @@ import {
 } from "@/features/bankroll/hooks/useBankroll";
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
-import { BankrollSummary } from "@/features/bankroll/components/BankrollSummary";
-import { EquityCurveChart } from "@/features/bankroll/components/EquityCurveChart";
 import { LedgerTable } from "@/features/bankroll/components/LedgerTable";
 import { BetsTable } from "@/features/bankroll/components/BetsTable";
 import { AdjustBankrollDialog } from "@/features/bankroll/components/AdjustBankrollDialog";
 import { BankrollSettingsDialog } from "@/features/bankroll/components/BankrollSettingsDialog";
 import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
+import { formatMoney } from "@/lib/money";
 
 export function Bankroll() {
   const persistent = isPersistentStorage();
@@ -48,12 +46,9 @@ export function Bankroll() {
 
   if (!persistent) {
     return (
-      <div className="flex h-full flex-col gap-6 p-8">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight">Bankroll</h1>
-        </header>
+      <div style={{ padding: "28px 32px 48px" }}>
+        <ScreenHeader bracket="BANKROLL · LEDGER" title="LEDGER" sub="Desktop required" />
         <Alert>
-          <AlertCircle className="size-4" />
           <AlertTitle>Desktop required</AlertTitle>
           <AlertDescription>
             The bet log + ledger live in a local SQLite database. Run via{" "}
@@ -67,53 +62,97 @@ export function Bankroll() {
   const isLoading = settings.isLoading || balance.isLoading || ledger.isLoading;
   const cfg = settings.data;
   const bal = balance.data;
+  const currency = cfg?.currency ?? "USD";
+  const startMinor = cfg?.startingBankrollMinor ?? 0;
+  const settledCount = (bets.data ?? []).filter((b) => b.status !== "OPEN").length;
+  const pnl = bal !== undefined ? bal - startMinor : 0;
+  const roi = startMinor > 0 ? pnl / startMinor : 0;
+  const unitMinor = cfg?.unitValueMinor ?? 0;
+  const unitsLeft = bal !== undefined && unitMinor > 0 ? bal / unitMinor : 0;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-8">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Bankroll</h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Ledger-driven balance, unit sizing and bet log. Each bet writes two entries (stake + result).
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setDepositOpen(true)}>
-              <Plus className="mr-1.5 size-3.5" /> Deposit
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setWithdrawOpen(true)}>
-              <Minus className="mr-1.5 size-3.5" /> Withdraw
-            </Button>
-            <Button size="sm" onClick={() => setBetOpen(true)}>
-              <Wallet className="mr-1.5 size-3.5" /> Log bet
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}>
-              <SettingsIcon className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div style={{ padding: "28px 32px 48px" }}>
+      <ScreenHeader
+        bracket={`BANKROLL · LEDGER · ${settledCount} SETTLED`}
+        title="LEDGER"
+        sub="Ledger-driven balance · unit sizing · paired stake + result entries"
+        right={
+          <>
+            <button className="zs-btn ghost" onClick={() => setDepositOpen(true)}>＋ DEPOSIT</button>
+            <button className="zs-btn ghost" onClick={() => setWithdrawOpen(true)}>− WITHDRAW</button>
+            <button className="zs-btn primary" onClick={() => setBetOpen(true)}>＋ LOG BET</button>
+            <button className="zs-btn ghost" onClick={() => setSettingsOpen(true)} aria-label="Bankroll settings">⚙</button>
+          </>
+        }
+      />
 
       {isLoading || !cfg || bal === undefined ? (
-        <div className="flex flex-col gap-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
       ) : (
         <>
-          <BankrollSummary
-            balanceMinor={bal}
-            exposureMinor={exposure.data ?? 0}
-            openBetCount={(bets.data ?? []).filter((b) => b.status === "OPEN").length}
-            settings={cfg}
-          />
-          <EquityCurveChart points={curve} currency={cfg.currency} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 22 }}>
+            <Stat
+              caption={`BALANCE · ${currency}`}
+              value={formatMoney(bal, currency)}
+              sub={(exposure.data ?? 0) > 0 ? `${formatMoney(exposure.data ?? 0, currency)} AT RISK` : "NO OPEN EXPOSURE"}
+              big
+            />
+            <Stat
+              caption={`AVAILABLE · ${currency}`}
+              value={formatMoney(Math.max(0, bal - (exposure.data ?? 0)), currency)}
+              sub={unitMinor > 0 ? `${unitsLeft.toFixed(2)} UNITS LEFT` : "—"}
+              big
+            />
+            <Stat
+              caption="P/L · START"
+              value={`${pnl >= 0 ? "+" : "−"}${formatMoney(Math.abs(pnl), currency)}`}
+              tone={pnl >= 0 ? "pos" : "neg"}
+              sub={`START ${formatMoney(startMinor, currency)}`}
+              big
+            />
+            <Stat
+              caption="ROI"
+              value={startMinor > 0 ? `${roi >= 0 ? "+" : ""}${(roi * 100).toFixed(2)}%` : "—"}
+              tone="amber"
+              sub="ON STARTING BANKROLL"
+              big
+            />
+          </div>
+
+          <Block head="EQUITY CURVE · 30D" pad={false} style={{ marginBottom: 22 }}>
+            <div style={{ padding: "16px 22px 12px" }}>
+              <EquityChart
+                points={curve.map((p) => p.balanceMinor)}
+                height={240}
+                formatLabel={(v) => formatMoney(v, currency)}
+              />
+            </div>
+            {curve.length > 1 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "0 24px 14px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 9,
+                  color: "var(--zs-fg-muted)",
+                  letterSpacing: "0.10em",
+                }}
+              >
+                <span>{new Date(curve[0].t).toLocaleDateString()}</span>
+                <span>{new Date(curve[curve.length - 1].t).toLocaleDateString()}</span>
+              </div>
+            )}
+          </Block>
+
           <Tabs defaultValue="bets">
             <TabsList>
-              <TabsTrigger value="bets">Bets ({bets.data?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="ledger">Ledger ({ledger.data?.length ?? 0})</TabsTrigger>
+              <TabsTrigger value="bets">BETS ({bets.data?.length ?? 0})</TabsTrigger>
+              <TabsTrigger value="ledger">LEDGER ({ledger.data?.length ?? 0})</TabsTrigger>
             </TabsList>
             <TabsContent value="bets" className="mt-4">
               <BetsTable bets={bets.data ?? []} bankroll={cfg} />

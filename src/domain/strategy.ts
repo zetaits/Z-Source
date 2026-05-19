@@ -38,6 +38,10 @@ export interface StakePolicy {
   flatUnits: number;
   minEdgePct: number;
   minConfidence: number;
+  /** Multiplier applied to stake when a pick is not "bonded" (≥ minLegsAlignedForBonded
+   * positive legs, no strong negative). Defaults to 0.5 — half-stake for unbonded
+   * picks to acknowledge weaker signal alignment. */
+  unbondedFactor: number;
 }
 
 export const DEFAULT_STAKE_POLICY: StakePolicy = {
@@ -45,8 +49,9 @@ export const DEFAULT_STAKE_POLICY: StakePolicy = {
   kellyFraction: 0.25,
   maxUnitsPerPlay: 3,
   flatUnits: 1,
-  minEdgePct: 0.02,
+  minEdgePct: 0.015,
   minConfidence: 0.4,
+  unbondedFactor: 0.5,
 };
 
 export interface RuleConfig {
@@ -76,19 +81,19 @@ export interface AnchorComboPolicy {
 
 export const DEFAULT_ANCHOR_POLICY: AnchorComboPolicy = {
   enabled: true,
-  minBaseConfidence: 0.65,
-  maxBaseDecimal: 1.55,
+  minBaseConfidence: 0.55,
+  maxBaseDecimal: 1.7,
   minAnchorConfidence: 0.5,
-  minRho: 0.15,
+  minRho: 0.2,
   targetMinDecimal: 1.6,
   targetMaxDecimal: 2.2,
 };
 
 export const DEFAULT_COMBO_POLICY: ComboPolicy = {
   enabled: true,
-  minCombinedDecimal: 1.65,
-  minCombinedEdge: 0.04,
-  minCombinedFairProb: 0.45,
+  minCombinedDecimal: 1.5,
+  minCombinedEdge: 0.025,
+  minCombinedFairProb: 0.35,
   anchorMode: DEFAULT_ANCHOR_POLICY,
 };
 

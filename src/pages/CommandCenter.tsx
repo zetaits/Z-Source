@@ -1,11 +1,6 @@
 import { useMemo } from "react";
-import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { KickoffBadge } from "@/components/domain/KickoffBadge";
-import { KpiCard } from "@/components/domain/KpiCard";
+import { Block, ScreenHeader, Stat, Sparkline, EquityChart, FlagChip, Tag } from "@/components/zs";
 import { findLeagueById } from "@/config/leagues";
 import type { CatalogMatch } from "@/domain/match";
 import { clvPct, profitMinor } from "@/domain/bet";
@@ -17,10 +12,9 @@ import {
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
 import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
-import { useSettings } from "@/features/settings/hooks/useSettings";
-import { resolveProviders } from "@/services/providers/factory";
 import { isPersistentStorage } from "@/storage";
 import { formatMoney, formatSignedMoney } from "@/lib/money";
+import { formatRelativeShort } from "@/lib/time";
 
 export function CommandCenter() {
   const persistent = isPersistentStorage();
@@ -29,23 +23,21 @@ export function CommandCenter() {
   const balanceQ = useCurrentBalance();
   const exposureQ = useOpenExposure();
   const openBetsQ = useBets({ status: "OPEN", limit: 20 });
-  const recentBetsQ = useBets({ limit: 100 });
-  const ledgerQ = useLedger(60);
-  const { data: appSettings } = useSettings();
+  const recentBetsQ = useBets({ limit: 200 });
+  const ledgerQ = useLedger(120);
 
   const upcoming = useMemo<CatalogMatch[]>(() => {
     const now = Date.now();
     return fixtures.data
       .filter((m) => new Date(m.kickoffAt).getTime() >= now - 3 * 3_600_000)
       .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
-      .slice(0, 10);
+      .slice(0, 12);
   }, [fixtures.data]);
 
-  const bookCount = useMemo(() => {
-    if (!appSettings) return 0;
-    const { oddsComponents } = resolveProviders(appSettings);
-    return oddsComponents.filter((c) => c.configured).length;
-  }, [appSettings]);
+  const nextMatch = useMemo(() => {
+    const now = Date.now();
+    return upcoming.find((m) => new Date(m.kickoffAt).getTime() >= now) ?? null;
+  }, [upcoming]);
 
   const currency = settingsQ.data?.currency ?? "USD";
 
@@ -75,304 +67,481 @@ export function CommandCenter() {
   }, [recentBetsQ.data]);
 
   const equityPts = useEquityCurve(ledgerQ.data);
+  const equityValues = useMemo(() => equityPts.map((p) => p.balanceMinor), [equityPts]);
 
   const pnlMinor = useMemo(() => {
     if (balanceQ.data === undefined || !settingsQ.data) return null;
     return balanceQ.data - settingsQ.data.startingBankrollMinor;
   }, [balanceQ.data, settingsQ.data]);
 
-  const fixtureError = fixtures.error as Error | undefined;
-  const isLoadingFixtures = fixtures.isLoading;
-  const fixtureCount = fixtures.data.length;
+  const today = new Date();
+  const dayLabel = today
+    .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
+    .toUpperCase();
+  const armedCount = upcoming.filter((m) => m.status !== "FT").length;
+  const nextWhistleTxt = nextMatch ? formatRelativeShort(nextMatch.kickoffAt) : "—";
+
+  const sub = `${armedCount} fixture${armedCount === 1 ? "" : "s"} in window · next whistle ${nextWhistleTxt}${
+    recentBetsQ.data ? ` · ${recentBetsQ.data.filter((b) => b.status !== "OPEN").length} settled` : ""
+  } · live sync 5s ago`;
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-auto p-8" style={{ background: "var(--zs-bg)" }}>
-
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-1">
-        <div className="kicker">
-          {new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })}
-          {" · "}window: today + 72h
-        </div>
-        <div className="flex flex-wrap items-end justify-between gap-4 mt-1">
-          <div>
-            <h1 className="font-display text-[34px] leading-[1.05] text-fg">
-              <span style={{ color: "var(--zs-fg)" }}>
-                {isLoadingFixtures ? "…" : fixtureCount}
-              </span>{" "}
-              fixtures in window
-              {bookCount > 0 && (
-                <>, <span style={{ color: "var(--zs-fg)" }}>{bookCount}</span> {bookCount === 1 ? "book" : "books"} live</>
-              )}
-              . Pick a match to analyze.
-            </h1>
-            <p className="mt-1.5 text-[13px] text-fg-dim">
-              OddsAPI quota untouched · analysis runs on demand
-            </p>
-          </div>
-          <Button asChild size="sm" style={{ background: "var(--zs-info-fill)", borderColor: "color-mix(in oklch, var(--zs-info) 40%, transparent)", color: "var(--zs-info)" }} variant="outline">
-            <Link to="/scanner">
-              Open Scanner <ArrowRight className="ml-1.5 size-3.5" />
+    <div style={{ padding: "28px 32px 48px" }}>
+      <ScreenHeader
+        bracket={`COMMAND · ${dayLabel} · WINDOW NOW+72H`}
+        title="EDGE FLOOR"
+        sub={sub}
+        right={
+          <>
+            <Link to="/strategy" className="zs-btn ghost" style={{ textDecoration: "none" }}>
+              ◆ STRATEGY
             </Link>
-          </Button>
-        </div>
-      </header>
+            <Link to="/scanner" className="zs-btn primary" style={{ textDecoration: "none" }}>
+              OPEN SCANNER →
+            </Link>
+          </>
+        }
+      />
 
-      {/* ── KPI row ──────────────────────────────────────────────── */}
-      {persistent ? (
-        settingsQ.data && balanceQ.data !== undefined && exposureQ.data !== undefined ? (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard
-              label="Bankroll"
-              main={formatMoney(balanceQ.data, currency)}
-              sub={pnlMinor !== null ? `${pnlMinor >= 0 ? "+" : ""}${formatMoney(pnlMinor, currency)} vs start` : undefined}
-              tone={pnlMinor !== null ? (pnlMinor >= 0 ? "pos" : "neg") : undefined}
-              spark={equityPts.map((p) => p.balanceMinor)}
-            />
-            <KpiCard
-              label="Open exposure"
-              main={formatMoney(exposureQ.data, currency)}
-              sub={`${openBetsQ.data?.length ?? 0} open bets`}
-              tone="info"
-            />
-            <KpiCard
-              label="CLV · 30d"
-              main={clvSummary ? `${clvSummary.avg >= 0 ? "+" : ""}${(clvSummary.avg * 100).toFixed(2)}%` : "—"}
-              sub={clvSummary ? `${clvSummary.positive} of ${clvSummary.count} beat close` : "No settled data"}
-              tone={clvSummary ? (clvSummary.avg >= 0 ? "pos" : "neg") : undefined}
-            />
-            <KpiCard
-              label="Yield · 30d"
-              main={yieldSummary ? `${yieldSummary.pct >= 0 ? "+" : ""}${(yieldSummary.pct * 100).toFixed(1)}%` : "—"}
-              sub={yieldSummary ? `ROI · ${yieldSummary.count} settled` : "No settled data"}
-              tone={yieldSummary ? (yieldSummary.pct >= 0 ? "pos" : "neg") : undefined}
-            />
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
-          </div>
-        )
-      ) : (
-        <Alert>
-          <AlertTitle>Limited mode</AlertTitle>
-          <AlertDescription>
-            Bankroll metrics live in SQLite — run via{" "}
-            <code className="font-mono text-xs">npm run tauri:dev</code> to activate.
-          </AlertDescription>
-        </Alert>
+      {/* HERO — NEXT WHISTLE */}
+      {nextMatch && <NextWhistleHero match={nextMatch} />}
+
+      {/* KPI ROW */}
+      {persistent && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 22 }}>
+          <Stat
+            caption="BANKROLL"
+            value={balanceQ.data !== undefined ? formatMoney(balanceQ.data, currency) : "—"}
+            sub={pnlMinor !== null ? `${pnlMinor >= 0 ? "+" : ""}${formatMoney(pnlMinor, currency)} vs start` : "No baseline"}
+            tone={pnlMinor !== null ? (pnlMinor >= 0 ? "pos" : "neg") : "fg"}
+            right={
+              equityValues.length > 1 ? (
+                <Sparkline points={equityValues} w={80} h={22} color="var(--zs-pos)" />
+              ) : undefined
+            }
+          />
+          <Stat
+            caption="OPEN EXPOSURE"
+            value={exposureQ.data !== undefined ? formatMoney(exposureQ.data, currency) : "—"}
+            sub={`${openBetsQ.data?.length ?? 0} open bet${(openBetsQ.data?.length ?? 0) === 1 ? "" : "s"}`}
+            tone="fg"
+          />
+          <Stat
+            caption="CLV · 30D"
+            value={clvSummary ? `${clvSummary.avg >= 0 ? "+" : ""}${(clvSummary.avg * 100).toFixed(2)}%` : "—"}
+            sub={clvSummary ? `${clvSummary.positive} of ${clvSummary.count} beat close` : "No settled data"}
+            tone={clvSummary ? (clvSummary.avg >= 0 ? "pos" : "neg") : "fg"}
+          />
+          <Stat
+            caption="YIELD · 30D"
+            value={yieldSummary ? `${yieldSummary.pct >= 0 ? "+" : ""}${(yieldSummary.pct * 100).toFixed(1)}%` : "—"}
+            sub={yieldSummary ? `${yieldSummary.count} settled` : "No settled data"}
+            tone={yieldSummary ? (yieldSummary.pct >= 0 ? "pos" : "neg") : "fg"}
+          />
+        </div>
       )}
 
-      {/* ── Fixtures + side ──────────────────────────────────────── */}
-      <div className="grid flex-1 gap-6 lg:grid-cols-3">
-        {/* Fixtures */}
-        <section className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[13px] font-semibold text-fg">Upcoming fixtures</span>
-            <span className="pill pill-ghost" style={{ height: 20, fontSize: 10 }}>today · +72h</span>
-          </div>
-          {fixtureError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Catalog unavailable</AlertTitle>
-              <AlertDescription>{fixtureError.message}</AlertDescription>
-            </Alert>
-          ) : isLoadingFixtures && upcoming.length === 0 ? (
-            <div className="flex flex-col gap-1.5">
-              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-11 w-full" />)}
-            </div>
+      {/* TWO COL: fixtures + side */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16 }}>
+        <Block
+          head={
+            <>
+              UPCOMING · WINDOW NOW+72H <Tag tone="amber">{upcoming.length}</Tag>
+            </>
+          }
+          headRight={
+            <Link to="/scanner" className="zs-btn sm ghost" style={{ textDecoration: "none" }}>
+              ALL →
+            </Link>
+          }
+          pad={false}
+        >
+          {fixtures.isLoading && upcoming.length === 0 ? (
+            <FixturesLoading />
+          ) : fixtures.isError ? (
+            <ErrorRow message={(fixtures.error as Error)?.message ?? "Catalog unavailable"} />
           ) : upcoming.length === 0 ? (
-            <div className="rounded-md border border-dashed border-zs p-5 text-sm text-fg-muted">
-              Nothing scheduled — enable leagues in Settings or try the Scanner.
-            </div>
+            <EmptyRow text="Nothing scheduled — enable leagues in Settings or open the Scanner." />
           ) : (
-            <div className="flex flex-col">
-              {upcoming.map((m) => <FixtureRow key={m.catalogId} match={m} />)}
-            </div>
+            <UpcomingTable matches={upcoming} />
           )}
-        </section>
+        </Block>
 
-        {/* Side panel */}
-        <aside className="flex flex-col gap-5">
-          {/* Open bets */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {persistent && (
-            <SideBlock
-              title="Open bets"
-              badge={String(openBetsQ.data?.length ?? 0)}
-              link="/bankroll"
-            >
+            <Block head="OPEN BETS" headRight={<Tag>{openBetsQ.data?.length ?? 0}</Tag>}>
               {(openBetsQ.data ?? []).length === 0 ? (
-                <p className="py-2 text-xs text-fg-muted">No open bets.</p>
+                <EmptyTicket />
               ) : (
-                <div className="flex flex-col">
-                  {(openBetsQ.data ?? []).slice(0, 4).map((b) => (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {(openBetsQ.data ?? []).slice(0, 5).map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center justify-between border-b border-zs py-2 text-[12px] last:border-0"
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto",
+                        gap: 10,
+                        padding: "8px 0",
+                        borderBottom: "1px solid var(--zs-rule)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11,
+                      }}
                     >
-                      <div className="min-w-0">
-                        <div className="truncate font-medium capitalize text-fg">
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: "var(--zs-fg)", textTransform: "capitalize" }}>
                           {b.selection.side}
                           {b.selection.line !== undefined ? ` ${b.selection.line}` : ""}
                         </div>
-                        <div className="truncate text-[11px] text-fg-muted">
+                        <div style={{ color: "var(--zs-fg-muted)", fontSize: 9, marginTop: 1 }}>
                           {b.marketKey} · {b.book}
                         </div>
                       </div>
-                      <div className="ml-3 shrink-0 text-right font-mono tabular-nums">
-                        <div className="text-fg">{b.priceDecimal.toFixed(2)}</div>
-                        {settingsQ.data && (
-                          <div className="text-[11px] text-fg-muted">
-                            {formatMoney(b.stakeMinor, currency)}
-                          </div>
-                        )}
+                      <div
+                        className="tabnum"
+                        style={{ textAlign: "right", color: "var(--zs-fg)" }}
+                      >
+                        <div>{b.priceDecimal.toFixed(2)}</div>
+                        <div style={{ color: "var(--zs-fg-muted)", fontSize: 9 }}>
+                          {formatMoney(b.stakeMinor, currency)}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </SideBlock>
+            </Block>
           )}
 
-          {/* Equity sparkline */}
-          {persistent && equityPts.length > 1 && (
-            <SideBlock title="Equity · 30d" badge={null}>
-              <EquitySparkline pts={equityPts.map((p) => p.balanceMinor)} />
-              {ledgerQ.data && ledgerQ.data.length > 0 && (
-                <div className="mt-1 flex justify-between font-mono text-[11px] text-fg-muted">
-                  <span>{new Date(equityPts[0].t).toLocaleDateString()}</span>
-                  <span>{new Date(equityPts[equityPts.length - 1].t).toLocaleDateString()}</span>
-                </div>
-              )}
-            </SideBlock>
+          {persistent && equityValues.length > 1 && (
+            <Block
+              head="EQUITY · 30D"
+              headRight={
+                pnlMinor !== null ? (
+                  <Tag tone={pnlMinor >= 0 ? "pos" : "neg"}>
+                    {formatSignedMoney(pnlMinor, currency)}
+                  </Tag>
+                ) : undefined
+              }
+              pad={false}
+            >
+              <div style={{ padding: "12px 14px 6px" }}>
+                <EquityChart points={equityValues} height={140} formatLabel={(v) => formatMoney(v, currency)} />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "6px 14px 12px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 9,
+                  color: "var(--zs-fg-muted)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                <span>{new Date(equityPts[0].t).toLocaleDateString()}</span>
+                <span>{new Date(equityPts[equityPts.length - 1].t).toLocaleDateString()}</span>
+              </div>
+            </Block>
           )}
 
-          {/* Recent activity */}
-          {persistent && settingsQ.data && (
-            <SideBlock title="Recent activity" badge={null}>
-              {(recentBetsQ.data ?? []).filter((b) => b.status !== "OPEN").length === 0 ? (
-                <p className="py-2 text-xs text-fg-muted">No settled bets yet.</p>
-              ) : (
-                <div className="flex flex-col">
-                  {(recentBetsQ.data ?? [])
-                    .filter((b) => b.status !== "OPEN")
-                    .slice(0, 4)
-                    .map((b) => {
-                      const pnl = profitMinor(b);
-                      return (
-                        <div
-                          key={b.id}
-                          className="flex items-center justify-between border-b border-zs py-2 text-[12px] last:border-0"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate capitalize text-fg">
-                              {b.selection.side}
-                              {b.selection.line !== undefined ? ` ${b.selection.line}` : ""}
-                            </div>
-                            <div className="truncate text-[11px] text-fg-muted">
-                              {b.status} · {new Date(b.settledAt ?? b.placedAt).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <span
-                            className="ml-3 font-mono tabular-nums text-[12px]"
-                            style={{ color: pnl > 0 ? "var(--zs-pos)" : pnl < 0 ? "var(--zs-neg)" : "var(--zs-fg-muted)" }}
-                          >
-                            {formatSignedMoney(pnl, currency)}
-                          </span>
+          {persistent && (recentBetsQ.data ?? []).some((b) => b.status !== "OPEN") && (
+            <Block
+              head="RECENT · 5"
+              headRight={
+                <Link to="/bankroll" className="zs-btn sm ghost" style={{ textDecoration: "none" }}>
+                  ALL →
+                </Link>
+              }
+              pad={false}
+            >
+              {(recentBetsQ.data ?? [])
+                .filter((b) => b.status !== "OPEN")
+                .slice(0, 5)
+                .map((b, i, arr) => {
+                  const pnl = profitMinor(b);
+                  return (
+                    <div
+                      key={b.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto auto",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "8px 14px",
+                        borderBottom: i < arr.length - 1 ? "1px solid var(--zs-rule)" : "none",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 11,
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: "var(--zs-fg)", textTransform: "capitalize" }}>
+                          {b.selection.side}
+                          {b.selection.line !== undefined ? ` ${b.selection.line}` : ""}
                         </div>
-                      );
-                    })}
-                </div>
-              )}
-            </SideBlock>
+                        <div style={{ color: "var(--zs-fg-muted)", fontSize: 9, marginTop: 1 }}>
+                          {b.status} · {new Date(b.settledAt ?? b.placedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <Tag tone={b.status === "WON" ? "pos" : b.status === "LOST" ? "neg" : "default"}>
+                        {b.status}
+                      </Tag>
+                      <div
+                        className="tabnum"
+                        style={{
+                          color: pnl > 0 ? "var(--zs-pos)" : pnl < 0 ? "var(--zs-neg)" : "var(--zs-fg-muted)",
+                          fontWeight: 600,
+                          minWidth: 70,
+                          textAlign: "right",
+                        }}
+                      >
+                        {formatSignedMoney(pnl, currency)}
+                      </div>
+                    </div>
+                  );
+                })}
+            </Block>
           )}
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-/* ── FixtureRow ─────────────────────────────────────────────────── */
-function FixtureRow({ match }: { match: CatalogMatch }) {
-  const league = findLeagueById(String(match.leagueId));
-  const leagueName = league?.name ?? match.leagueName ?? String(match.leagueId);
-  const kickoff = new Date(match.kickoffAt);
-  const timeStr = kickoff.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return (
-    <Link
-      to={`/match/${match.catalogId}`}
-      className="group grid items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-zs-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ gridTemplateColumns: "54px 1fr auto" }}
-    >
-      <span className="font-mono text-[13px] tabular-nums text-fg">{timeStr}</span>
-      <div className="min-w-0">
-        <div className="text-[13.5px] font-medium text-fg">
-          {match.home.name}{" "}
-          <span className="text-fg-muted mx-1.5">vs</span>
-          {match.away.name}
         </div>
-        <div className="kicker mt-0.5">{leagueName}</div>
-      </div>
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-fg-muted transition-colors group-hover:text-info">
-        analyze →
-      </span>
-    </Link>
-  );
-}
-
-/* ── SideBlock ──────────────────────────────────────────────────── */
-function SideBlock({
-  title,
-  badge,
-  link,
-  children,
-}: {
-  title: string;
-  badge: string | null;
-  link?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[13px] font-semibold text-fg">{title}</span>
-        {badge !== null && (
-          <span className="pill pill-ghost" style={{ height: 18, fontSize: 10 }}>
-            {badge}
-          </span>
-        )}
-        {link && (
-          <Link
-            to={link}
-            className="font-mono text-[10px] uppercase tracking-wider text-fg-muted hover:text-info"
-          >
-            View all
-          </Link>
-        )}
-      </div>
-      <div className="rounded-lg border border-zs px-3 py-1" style={{ background: "var(--zs-bg-elev)" }}>
-        {children}
       </div>
     </div>
   );
 }
 
-/* ── EquitySparkline ────────────────────────────────────────────── */
-function EquitySparkline({ pts }: { pts: number[] }) {
-  const min = Math.min(...pts);
-  const max = Math.max(...pts);
-  const range = max - min || 1;
-  const W = 300, H = 56;
-  const xs = pts.map((_, i) => (i / (pts.length - 1)) * W);
-  const ys = pts.map((p) => H - ((p - min) / range) * H);
-  const path = xs.map((x, i) => `${i === 0 ? "M" : "L"} ${x} ${ys[i]}`).join(" ");
-  const fillPath = `${path} L ${W} ${H} L 0 ${H} Z`;
-  const rising = pts[pts.length - 1] >= pts[0];
-  const stroke = rising ? "var(--zs-pos)" : "var(--zs-neg)";
-  const fill = rising ? "var(--zs-pos-fill)" : "var(--zs-neg-fill)";
+function NextWhistleHero({ match }: { match: CatalogMatch }) {
+  const league = findLeagueById(String(match.leagueId));
+  const kickoff = new Date(match.kickoffAt);
+  const timeStr = kickoff.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const dayStr = kickoff
+    .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
+    .toUpperCase();
+  const relative = formatRelativeShort(match.kickoffAt);
+  const homeShort = match.home.name.split(" ").slice(-1)[0].toUpperCase();
+  const awayShort = match.away.name.split(" ").slice(-1)[0].toUpperCase();
+  const leagueName = league?.name ?? match.leagueName;
+  const cc = league?.countryCode ?? match.countryCode ?? "—";
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" className="mt-1">
-      <path d={fillPath} fill={fill} />
-      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" />
-    </svg>
+    <div className="zs-block" style={{ padding: 0, marginBottom: 22 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "stretch" }}>
+        <div style={{ padding: "20px 28px", borderRight: "1px solid var(--zs-border)" }}>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              color: "var(--zs-accent)",
+              letterSpacing: "0.20em",
+              marginBottom: 14,
+            }}
+          >
+            ┏━ NEXT WHISTLE · IN {relative}
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 18, marginBottom: 14, flexWrap: "wrap" }}>
+            <span className="zs-bignum" style={{ fontSize: 56 }}>
+              {homeShort}
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 22,
+                color: "var(--zs-fg-muted)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              vs
+            </span>
+            <span className="zs-bignum" style={{ fontSize: 56, color: "var(--zs-fg-dim)" }}>
+              {awayShort}
+            </span>
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--zs-fg-dim)", marginBottom: 4 }}>
+            {match.home.name} <span style={{ color: "var(--zs-fg-muted)" }}>vs</span> {match.away.name}
+          </div>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              color: "var(--zs-fg-muted)",
+              letterSpacing: "0.10em",
+            }}
+          >
+            <FlagChip cc={cc} /> {leagueName.toUpperCase()} · {dayStr} · KICKOFF {timeStr}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minWidth: 320 }}>
+          <HeroCell k="KICKOFF" v={timeStr} sub={relative.toUpperCase()} tone="fg" />
+          <HeroCell k="WINDOW" v={dayStr} sub={`IN ${relative.toUpperCase()}`} tone="amber" />
+        </div>
+      </div>
+      <div className="zs-block-head" style={{ borderTop: "1px solid var(--zs-border)", borderBottom: "none" }}>
+        <div className="l">
+          ▸ {match.home.name.toUpperCase()} · {match.away.name.toUpperCase()}
+        </div>
+        <div className="r">
+          <Link
+            to={`/match/${match.catalogId}`}
+            className="zs-btn sm primary"
+            style={{ textDecoration: "none" }}
+          >
+            ANALYSE →
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroCell({ k, v, sub, tone }: { k: string; v: string; sub: string; tone: "fg" | "amber" | "pos" }) {
+  const cls = tone === "amber" ? "amber" : tone === "pos" ? "pos" : "";
+  return (
+    <div
+      style={{
+        padding: "20px 22px",
+        borderLeft: "1px solid var(--zs-border)",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      <div className="zs-caption">{k}</div>
+      <div className={`zs-bignum ${cls}`} style={{ fontSize: 32, margin: "14px 0 8px" }}>
+        {v}
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 10,
+          color: "var(--zs-fg-muted)",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+      >
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+function UpcomingTable({ matches }: { matches: CatalogMatch[] }) {
+  return (
+    <table className="zs-table">
+      <thead>
+        <tr>
+          <th style={{ width: 56 }}>WHEN</th>
+          <th>FIXTURE</th>
+          <th style={{ width: 140 }}>LEAGUE</th>
+          <th style={{ width: 64 }} />
+        </tr>
+      </thead>
+      <tbody>
+        {matches.map((m) => {
+          const league = findLeagueById(String(m.leagueId));
+          const t = new Date(m.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+          const dayShort = new Date(m.kickoffAt)
+            .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
+            .toUpperCase();
+          return (
+            <tr key={m.catalogId}>
+              <td className="row-key tabnum">{t}</td>
+              <td>
+                <div style={{ color: "var(--zs-fg)" }}>
+                  <strong style={{ fontWeight: 600 }}>{m.home.name}</strong>
+                  <span style={{ color: "var(--zs-fg-muted)", margin: "0 6px" }}>vs</span>
+                  <strong style={{ fontWeight: 600 }}>{m.away.name}</strong>
+                </div>
+                <div style={{ color: "var(--zs-fg-muted)", fontSize: 10, marginTop: 2 }}>{dayShort}</div>
+              </td>
+              <td className="muted">
+                <FlagChip cc={league?.countryCode ?? m.countryCode} />{" "}
+                <span style={{ marginLeft: 4 }}>{league?.name ?? m.leagueName}</span>
+              </td>
+              <td>
+                <Link
+                  to={`/match/${m.catalogId}`}
+                  className="zs-btn sm ghost"
+                  style={{ height: 22, padding: "0 8px", textDecoration: "none" }}
+                >
+                  →
+                </Link>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function FixturesLoading() {
+  return (
+    <div style={{ padding: 20 }}>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="shimmer"
+          style={{
+            height: 36,
+            marginBottom: 6,
+            borderTop: "1px solid var(--zs-rule)",
+            borderBottom: "1px solid var(--zs-rule)",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ErrorRow({ message }: { message: string }) {
+  return (
+    <div
+      style={{
+        padding: 18,
+        fontFamily: "var(--font-mono)",
+        fontSize: 12,
+        color: "var(--zs-neg)",
+        letterSpacing: "0.04em",
+      }}
+    >
+      × CATALOG UNAVAILABLE — {message}
+    </div>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        padding: "26px 18px",
+        fontFamily: "var(--font-mono)",
+        fontSize: 12,
+        color: "var(--zs-fg-muted)",
+        letterSpacing: "0.04em",
+        textAlign: "center",
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function EmptyTicket() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        padding: "18px 0",
+        color: "var(--zs-fg-muted)",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+        letterSpacing: "0.06em",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontSize: 22, color: "var(--zs-fg-faint)" }}>—</div>
+      <div>NO ACTIVE TICKETS</div>
+      <div style={{ fontSize: 9, color: "var(--zs-fg-faint)" }}>BANKROLL FULL · DEPLOY ON BONDED PLAYS</div>
+    </div>
   );
 }

@@ -61,6 +61,7 @@ export const doubleChanceDcModel: Rule = {
     return {
       ruleId: "dc-xg-model",
       leg: "matchup",
+      family: "poisson-xg",
       verdict: strength > 0 ? "SUPPORT" : "AGAINST",
       strength,
       weight: config.weight,

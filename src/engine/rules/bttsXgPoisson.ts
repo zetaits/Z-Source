@@ -49,6 +49,7 @@ export const bttsXgPoisson: Rule = {
     return {
       ruleId: "btts-xg-poisson",
       leg: "matchup",
+      family: "poisson-xg",
       verdict: strength > 0 ? "SUPPORT" : "AGAINST",
       strength,
       weight: config.weight,

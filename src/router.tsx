@@ -3,7 +3,6 @@ import { AppShell } from "@/layouts/AppShell";
 import { CommandCenter } from "@/pages/CommandCenter";
 import { Scanner } from "@/pages/Scanner";
 import { MatchDetail } from "@/pages/MatchDetail";
-import { Backtest } from "@/pages/Backtest";
 import { Bankroll } from "@/pages/Bankroll";
 import { Metrics } from "@/pages/Metrics";
 import { Strategy } from "@/pages/Strategy";
@@ -23,7 +22,6 @@ export const router = createBrowserRouter([
       { path: "match/:id", element: <MatchDetail />, errorElement: <ErrorFallback /> },
       { path: "bankroll", element: <Bankroll />, errorElement: <ErrorFallback /> },
       { path: "metrics", element: <Metrics />, errorElement: <ErrorFallback /> },
-      { path: "backtest", element: <Backtest />, errorElement: <ErrorFallback /> },
       { path: "strategy", element: <Strategy />, errorElement: <ErrorFallback /> },
       { path: "settings", element: <Settings />, errorElement: <ErrorFallback /> },
       {

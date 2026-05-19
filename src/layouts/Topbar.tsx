@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Command, Search } from "lucide-react";
-import { clvPct } from "@/domain/bet";
+import { clvPct, profitMinor } from "@/domain/bet";
 import { formatMoney } from "@/lib/money";
 import {
   useBankrollSettings,
   useCurrentBalance,
 } from "@/features/bankroll/hooks/useBankroll";
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
+import { ThemeMenu } from "@/features/tweaks/ThemeMenu";
 import { isPersistentStorage } from "@/storage";
-import { cn } from "@/lib/utils";
 
 interface Props {
   onOpenPalette?(): void;
@@ -23,12 +22,13 @@ export function Topbar({ onOpenPalette }: Props) {
   const balanceQ = useCurrentBalance();
   const exposureQ = useOpenExposure();
   const settingsQ = useBankrollSettings();
-  const recentQ = useBets({ limit: 100 });
-  const syncLabel = useSyncTick();
+  const recentQ = useBets({ limit: 200 });
+
+  const clock = useClock();
 
   const currency = settingsQ.data?.currency ?? "USD";
 
-  const clvText = useMemo(() => {
+  const clvAvg = useMemo(() => {
     const bets = recentQ.data ?? [];
     const cutoff = Date.now() - 30 * 24 * 3_600_000;
     const relevant = bets.filter((b) => {
@@ -37,124 +37,187 @@ export function Topbar({ onOpenPalette }: Props) {
       const t = b.settledAt ? new Date(b.settledAt).getTime() : 0;
       return t >= cutoff;
     });
-    if (relevant.length === 0) return { value: "—", tone: "muted" as const };
-    const avg =
-      relevant.reduce((s, b) => s + (clvPct(b) ?? 0), 0) / relevant.length;
-    const sign = avg >= 0 ? "+" : "";
-    return {
-      value: `${sign}${(avg * 100).toFixed(2)}%`,
-      tone: avg >= 0 ? ("pos" as const) : ("neg" as const),
-    };
+    if (relevant.length === 0) return null;
+    return relevant.reduce((s, b) => s + (clvPct(b) ?? 0), 0) / relevant.length;
+  }, [recentQ.data]);
+
+  const roi30d = useMemo(() => {
+    const bets = (recentQ.data ?? []).filter((b) => b.status !== "OPEN");
+    if (bets.length === 0) return null;
+    const totalStake = bets.reduce((s, b) => s + b.stakeMinor, 0);
+    if (totalStake === 0) return null;
+    const totalPnl = bets.reduce((s, b) => s + profitMinor(b), 0);
+    return totalPnl / totalStake;
   }, [recentQ.data]);
 
   return (
     <header
-      className="flex h-12 shrink-0 items-center gap-4 border-b border-zs px-6"
-      style={{ background: "var(--zs-bg-elev)" }}
+      style={{
+        height: 46,
+        flex: "0 0 46px",
+        borderBottom: "1px solid var(--zs-border)",
+        display: "flex",
+        alignItems: "stretch",
+        background: "var(--zs-bg)",
+      }}
     >
-      <div className="flex items-center gap-2">
-        <span className="ind ind-pos animate-pulse" aria-hidden />
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-fg-muted">
-          LIVE · {syncLabel}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "0 18px",
+          borderRight: "1px solid var(--zs-border)",
+          minWidth: 200,
+        }}
+      >
+        <span className="zs-pulse" style={{ width: 7, height: 7, background: "var(--zs-pos)" }} aria-hidden />
+        <span
+          className="tabnum"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            color: "var(--zs-fg)",
+            letterSpacing: "0.04em",
+          }}
+        >
+          {clock}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "var(--zs-fg-muted)",
+            letterSpacing: "0.10em",
+          }}
+        >
+          SYNC 5s
         </span>
       </div>
 
-      {onOpenPalette ? (
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          aria-label="Open command palette"
-          className="flex h-8 min-w-0 max-w-[480px] flex-1 items-center gap-2 rounded-md border border-zs bg-zs-bg px-3 text-left transition-colors hover:border-zs-bright"
-        >
-          <Search className="size-3.5 shrink-0 text-fg-muted" aria-hidden />
-          <span className="truncate text-[12.5px] text-fg-muted">
-            Search fixtures, rules, markets…
-          </span>
-          <span className="ml-auto flex items-center gap-1 rounded border border-zs px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
-            {isMac ? (
-              <Command className="size-3" aria-hidden />
-            ) : (
-              <span>Ctrl</span>
-            )}
-            <span>K</span>
-          </span>
-        </button>
-      ) : (
-        <div className="flex-1" />
-      )}
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        aria-label="Open command palette"
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "0 18px",
+          background: "transparent",
+          border: "none",
+          borderRight: "1px solid var(--zs-border)",
+          color: "var(--zs-fg-muted)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 12,
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span style={{ color: "var(--zs-accent)", fontWeight: 700 }}>{">>"}</span>
+        <span>search fixtures, rules, markets…</span>
+        <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          <span className="zs-kbd">{isMac ? "⌘" : "Ctrl"}</span>
+          <span className="zs-kbd">K</span>
+        </span>
+      </button>
 
       {persistent ? (
-        <div className="flex items-center gap-5">
-          <TopStat
+        <div style={{ display: "flex", alignItems: "stretch" }}>
+          <KpiCell
             label="BANKROLL"
-            value={
-              balanceQ.data !== undefined
-                ? formatMoney(balanceQ.data, currency)
-                : "—"
-            }
+            value={balanceQ.data !== undefined ? formatMoney(balanceQ.data, currency) : "—"}
             tone="fg"
           />
-          <TopStat
+          <KpiCell
             label="EXPOSURE"
-            value={
-              exposureQ.data !== undefined
-                ? formatMoney(exposureQ.data, currency)
-                : "—"
-            }
+            value={exposureQ.data !== undefined ? formatMoney(exposureQ.data, currency) : "€0.00"}
             tone={(exposureQ.data ?? 0) > 0 ? "info" : "muted"}
           />
-          <TopStat label="CLV 30D" value={clvText.value} tone={clvText.tone} />
+          <KpiCell
+            label="CLV·30D"
+            value={clvAvg === null ? "—" : `${clvAvg >= 0 ? "+" : ""}${(clvAvg * 100).toFixed(2)}%`}
+            tone={clvAvg === null ? "muted" : clvAvg >= 0 ? "pos" : "neg"}
+          />
+          <KpiCell
+            label="ROI"
+            value={roi30d === null ? "—" : `${roi30d >= 0 ? "+" : ""}${(roi30d * 100).toFixed(2)}%`}
+            tone={roi30d === null ? "muted" : roi30d >= 0 ? "pos" : "neg"}
+          />
         </div>
       ) : (
-        <span className="font-mono text-[10.5px] uppercase tracking-wider text-fg-muted">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "0 18px",
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "var(--zs-fg-muted)",
+            letterSpacing: "0.10em",
+          }}
+        >
           LIMITED MODE · RUN VIA TAURI
-        </span>
+        </div>
       )}
+
+      <ThemeMenu />
     </header>
   );
 }
 
-type Tone = "fg" | "pos" | "neg" | "info" | "warn" | "muted";
+type Tone = "fg" | "pos" | "neg" | "info" | "muted";
 
-function TopStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: Tone;
-}) {
-  const colorClass = cn(
-    tone === "fg" && "text-fg",
-    tone === "pos" && "text-pos",
-    tone === "neg" && "text-neg",
-    tone === "info" && "text-info",
-    tone === "warn" && "text-warn",
-    tone === "muted" && "text-fg-muted",
-  );
+function KpiCell({ label, value, tone }: { label: string; value: string; tone: Tone }) {
+  const color =
+    tone === "pos" ? "var(--zs-pos)" :
+    tone === "neg" ? "var(--zs-neg)" :
+    tone === "info" ? "var(--zs-info)" :
+    tone === "muted" ? "var(--zs-fg-muted)" : "var(--zs-fg)";
   return (
-    <div className="flex flex-col items-end leading-tight">
-      <span className="kicker text-[9px]">{label}</span>
-      <span
-        className={cn(
-          "font-mono text-[12.5px] font-semibold tabular-nums",
-          colorClass,
-        )}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        gap: 2,
+        padding: "0 18px",
+        borderRight: "1px solid var(--zs-border)",
+        minWidth: 110,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 9,
+          color: "var(--zs-fg-muted)",
+          letterSpacing: "0.16em",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        className="tabnum"
+        style={{
+          fontFamily: "var(--font-display)",
+          fontWeight: 700,
+          fontSize: 14,
+          color,
+          letterSpacing: "-0.01em",
+        }}
       >
         {value}
-      </span>
+      </div>
     </div>
   );
 }
 
-const useSyncTick = () => {
-  const [, setTick] = useState(0);
-  const [mountedAt] = useState(() => Date.now());
+function useClock(): string {
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 5_000);
-    return () => clearInterval(id);
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
   }, []);
-  const secs = Math.max(1, Math.floor((Date.now() - mountedAt) / 1_000) % 60 || 1);
-  return `SYNC ${secs}s AGO`;
-};
+  return now.toLocaleTimeString("en-GB", { hour12: false });
+}

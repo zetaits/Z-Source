@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { LeagueAccordion } from "@/components/domain/LeagueAccordion";
-import { DayKpiRow } from "@/features/scanner/components/DayKpiRow";
-import { NextUpStrip } from "@/features/scanner/components/NextUpStrip";
-import { FilterBar } from "@/features/scanner/components/FilterBar";
-import { LookAheadFooter } from "@/features/scanner/components/LookAheadFooter";
+import { Block, FlagChip, HourStrip, ScreenHeader, Tag } from "@/components/zs";
+import { findLeagueById } from "@/config/leagues";
+import type { CatalogMatch } from "@/domain/match";
 import { useScannerFilters } from "@/features/scanner/hooks/useScannerFilters";
+import type { StatusFilter, SortKey } from "@/features/scanner/hooks/useScannerFilters";
 import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { useSettings } from "@/features/settings/hooks/useSettings";
-import { findLeagueById } from "@/config/leagues";
 import { localDayKey } from "@/services/catalog/windowFixtures";
-import type { CatalogMatch } from "@/domain/match";
+import { formatRelativeShort } from "@/lib/time";
 
 interface LeagueGroup {
   leagueId: string;
@@ -23,6 +17,20 @@ interface LeagueGroup {
   countryCode: string;
   matches: CatalogMatch[];
 }
+
+const targetLocalDayKey = (offset: number): string => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  return localDayKey(d);
+};
+
+const formatDayLabel = (offset: number): string => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "short" });
+};
 
 const groupByLeague = (matches: CatalogMatch[]): LeagueGroup[] => {
   const map = new Map<string, LeagueGroup>();
@@ -41,7 +49,6 @@ const groupByLeague = (matches: CatalogMatch[]): LeagueGroup[] => {
     }
     g.matches.push(m);
   }
-  // Sort groups: tier (top first), then by name. Sort matches within group by kickoff.
   const groups = [...map.values()];
   groups.sort((a, b) => {
     const ta = findLeagueById(a.leagueId)?.tier ?? 99;
@@ -55,205 +62,457 @@ const groupByLeague = (matches: CatalogMatch[]): LeagueGroup[] => {
   return groups;
 };
 
-const targetLocalDayKey = (offset: number): string => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
-  return localDayKey(d);
-};
-
-const formatDayLabel = (offset: number): string => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
-  return d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "short" });
-};
-
-const formatRelativeShort = (iso: string): string => {
-  const diffMin = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
-  if (diffMin < 0) return "kickoff passed";
-  if (diffMin < 60) return `in ${diffMin}m`;
-  const h = Math.floor(diffMin / 60);
-  const m = diffMin % 60;
-  if (h < 24) return `in ${h}h ${m.toString().padStart(2, "0")}m`;
-  const days = Math.round(h / 24);
-  return `in ${days}d`;
-};
-
 export function Scanner() {
   const [offset, setOffset] = useState(0);
   const { data: settings } = useSettings();
   const fixtures = useFixturesWindow();
-  const { filters, apply } = useScannerFilters();
-
-  const allFixtures = fixtures.data;
+  const { filters, apply, update } = useScannerFilters();
 
   const dayMatches = useMemo<CatalogMatch[]>(() => {
     const target = targetLocalDayKey(offset);
-    return allFixtures.filter((m) => localDayKey(new Date(m.kickoffAt)) === target);
-  }, [allFixtures, offset]);
+    return fixtures.data.filter((m) => localDayKey(new Date(m.kickoffAt)) === target);
+  }, [fixtures.data, offset]);
 
-  const filteredDayMatches = useMemo(() => apply(dayMatches), [dayMatches, apply]);
-  const groups = useMemo(() => groupByLeague(filteredDayMatches), [filteredDayMatches]);
+  const filtered = useMemo(() => apply(dayMatches), [dayMatches, apply]);
+  const groups = useMemo(() => groupByLeague(filtered), [filtered]);
 
-  // Next-up: next SCHEDULED in selected day (fall back to any non-final).
   const nextUp = useMemo<CatalogMatch | null>(() => {
     const now = Date.now();
-    const future = filteredDayMatches
-      .filter((m) => new Date(m.kickoffAt).getTime() >= now - 5 * 60_000)
-      .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
-      .sort((a, b) => new Date(a.kickoffAt).getTime() - new Date(b.kickoffAt).getTime());
-    return future[0] ?? null;
-  }, [filteredDayMatches]);
-
-  // Look-ahead: when current day is thin (≤2), find next offset within +3d that has ≥ current+1.
-  const lookAhead = useMemo(() => {
-    if (dayMatches.length > 2) return null;
-    let best: { offset: number; count: number; leagues: number } | null = null;
-    for (let o = 0; o <= 3; o++) {
-      if (o === offset) continue;
-      const key = targetLocalDayKey(o);
-      const day = allFixtures.filter((m) => localDayKey(new Date(m.kickoffAt)) === key);
-      if (day.length <= dayMatches.length) continue;
-      const leagues = new Set(day.map((m) => String(m.leagueId))).size;
-      if (!best || day.length > best.count) {
-        best = { offset: o, count: day.length, leagues };
-      }
-    }
-    if (!best) return null;
-    return {
-      offset: best.offset,
-      weekday: formatDayLabel(best.offset).split(" ")[0],
-      dayLabel: formatDayLabel(best.offset),
-      count: best.count,
-      leagueCount: best.leagues,
-    };
-  }, [allFixtures, dayMatches.length, offset]);
+    return (
+      filtered
+        .filter((m) => new Date(m.kickoffAt).getTime() >= now - 5 * 60_000)
+        .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
+        .sort((a, b) => new Date(a.kickoffAt).getTime() - new Date(b.kickoffAt).getTime())[0] ?? null
+    );
+  }, [filtered]);
 
   const enabledCount = settings?.enabledLeagueIds.length ?? 0;
-
-  // Window summary (all fixtures inside the +3d window)
-  const windowLeagueCount = useMemo(
-    () => new Set(allFixtures.map((m) => String(m.leagueId))).size,
-    [allFixtures],
-  );
-  const windowNextKickoff = useMemo(() => {
-    const now = Date.now();
-    const upcoming = allFixtures
-      .filter((m) => new Date(m.kickoffAt).getTime() >= now)
-      .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
-      .sort((a, b) => new Date(a.kickoffAt).getTime() - new Date(b.kickoffAt).getTime());
-    return upcoming[0]?.kickoffAt;
-  }, [allFixtures]);
-
   const todayLabel = useMemo(() => formatDayLabel(offset), [offset]);
 
-  const lastErrorRef = useRef<string | null>(null);
+  // toast for errors
+  const lastErrRef = useRef<string | null>(null);
   useEffect(() => {
-    const message = fixtures.isError
+    const msg = fixtures.isError
       ? (fixtures.error as Error | undefined)?.message ?? "Catalog fetch failed"
       : null;
-    if (message && message !== lastErrorRef.current) {
-      lastErrorRef.current = message;
-      toast.error("Catalog unavailable", { description: message });
+    if (msg && msg !== lastErrRef.current) {
+      lastErrRef.current = msg;
+      toast.error("Catalog unavailable", { description: msg });
     }
-    if (!message) lastErrorRef.current = null;
+    if (!msg) lastErrRef.current = null;
   }, [fixtures.isError, fixtures.error]);
 
-  const dayKicker = `${todayLabel.toUpperCase()} · WINDOW NOW+72H`;
-
-  const filtersActive =
-    filters.status !== "all" || filters.leagues.length > 0 || filters.sort !== "kickoff";
-
   return (
-    <div className="flex h-full flex-col gap-6 overflow-auto p-8" style={{ background: "var(--zs-bg)" }}>
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <header className="flex flex-col gap-1">
-        <div className="kicker">{dayKicker}</div>
-        <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-[30px] leading-[1.1] text-fg-dim">
-              <span className="text-fg">{fixtures.isLoading ? "…" : dayMatches.length}</span>{" "}
-              {dayMatches.length === 1 ? "fixture" : "fixtures"} on {todayLabel}
-              {" · "}
-              <span className="text-fg">{windowLeagueCount}</span> {windowLeagueCount === 1 ? "league" : "leagues"} live in window
-              {windowNextKickoff && (
-                <>
-                  {" · next kickoff "}
-                  <span className="text-fg">{formatRelativeShort(windowNextKickoff)}</span>
-                </>
-              )}
-            </h1>
-            <p className="mt-1.5 text-[13px] text-fg-dim">
-              OddsAPI quota untouched · click a match to run analysis on demand
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fixtures.refetch()}
-            disabled={fixtures.isFetching}
-          >
-            <RefreshCcw className={`mr-2 size-3.5 ${fixtures.isFetching ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-      </header>
+    <div style={{ padding: "28px 32px 48px" }}>
+      <ScreenHeader
+        bracket={`SCANNER · 72H WINDOW · ${enabledCount} LEAGUES`}
+        title="FIXTURE BOARD"
+        sub={`${todayLabel.toUpperCase()} · ${dayMatches.length} fixture${dayMatches.length === 1 ? "" : "s"}${
+          nextUp ? ` · next whistle ${formatRelativeShort(nextUp.kickoffAt)}` : ""
+        }`}
+        right={
+          <>
+            <button
+              className="zs-btn ghost"
+              onClick={() => void fixtures.refetch()}
+              disabled={fixtures.isFetching}
+            >
+              ⟲ {fixtures.isFetching ? "REFRESHING…" : "REFRESH"}
+            </button>
+            <Link to="/settings" className="zs-btn primary" style={{ textDecoration: "none" }}>
+              LEAGUES →
+            </Link>
+          </>
+        }
+      />
 
       {enabledCount === 0 && (
-        <Alert>
-          <AlertCircle className="size-4" />
-          <AlertTitle>No leagues enabled</AlertTitle>
-          <AlertDescription>
-            Pick the leagues you want to scan in{" "}
-            <Link className="text-primary hover:underline" to="/settings">Settings</Link>.
-          </AlertDescription>
-        </Alert>
+        <div
+          style={{
+            border: "1px solid var(--zs-accent)",
+            background: "var(--zs-accent-fill)",
+            padding: "12px 16px",
+            marginBottom: 16,
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            color: "var(--zs-fg)",
+          }}
+        >
+          <strong style={{ color: "var(--zs-accent)" }}>NO LEAGUES ENABLED</strong> — pick leagues in{" "}
+          <Link to="/settings" style={{ color: "var(--zs-accent)" }}>
+            Settings
+          </Link>{" "}
+          to populate the board.
+        </div>
       )}
 
-      {fixtures.isError && (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" />
-          <AlertTitle>Catalog unavailable</AlertTitle>
-          <AlertDescription>
-            {(fixtures.error as Error)?.message ?? "Unknown error"}
-          </AlertDescription>
-        </Alert>
-      )}
+      <DayStrip fixtures={fixtures.data} offset={offset} onChange={setOffset} />
 
-      {/* ── Day KPI row (replaces DateTabs) ───────────────────────── */}
-      <DayKpiRow fixtures={allFixtures} offset={offset} onChange={setOffset} />
+      <FilterBar
+        status={filters.status}
+        sort={filters.sort}
+        onStatus={(s) => update({ status: s })}
+        onSort={(s) => update({ sort: s })}
+        showing={filtered.length}
+      />
 
-      {/* ── Next-up strip ────────────────────────────────────────── */}
-      <NextUpStrip match={nextUp} />
+      {nextUp && <NextUpStrip match={nextUp} />}
 
-      {/* ── Filter bar ───────────────────────────────────────────── */}
-      <FilterBar dayMatches={dayMatches} />
-
-      {/* ── League list ──────────────────────────────────────────── */}
       {fixtures.isLoading ? (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
+        <Loading />
       ) : groups.length > 0 ? (
-        <LeagueAccordion groups={groups} />
+        groups.map((g) => <LeagueBlock key={g.leagueId} group={g} />)
       ) : (
-        <div className="rounded-lg border border-dashed border-zs p-8 text-center" style={{ background: "var(--zs-bg-elev)" }}>
-          <p className="kicker">
-            {filtersActive ? "no matches under active filters" : `no fixtures on ${todayLabel}`}
-          </p>
-          <p className="mt-2 text-[13px] text-fg-dim">
-            {filtersActive
-              ? "Loosen the filter set or pick a different day."
-              : "Enable more leagues in Settings or pick another day above."}
-          </p>
+        <div
+          className="zs-block"
+          style={{
+            padding: "26px 18px",
+            textAlign: "center",
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            color: "var(--zs-fg-muted)",
+          }}
+        >
+          NO FIXTURES ON {todayLabel.toUpperCase()} — try a different day or enable more leagues.
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* ── Look-ahead footer ────────────────────────────────────── */}
-      <LookAheadFooter target={lookAhead} onJump={setOffset} />
+function DayStrip({
+  fixtures,
+  offset,
+  onChange,
+}: {
+  fixtures: CatalogMatch[];
+  offset: number;
+  onChange: (o: number) => void;
+}) {
+  const days = [0, 1, 2, 3].map((o) => {
+    const target = targetLocalDayKey(o);
+    const dayMatches = fixtures.filter((m) => localDayKey(new Date(m.kickoffAt)) === target);
+    const hours = Array.from(
+      new Set(dayMatches.map((m) => new Date(m.kickoffAt).getHours())),
+    );
+    hours.sort((a, b) => a - b);
+    const range = hours.length > 0
+      ? `${hours[0].toString().padStart(2, "0")}:00${
+          hours.length > 1 ? `–${hours[hours.length - 1].toString().padStart(2, "0")}:00` : ""
+        }`
+      : null;
+    const date = new Date();
+    date.setDate(date.getDate() + o);
+    return {
+      o,
+      day: date.toLocaleDateString("en-GB", { weekday: "short" }).toUpperCase(),
+      dt: date.toLocaleDateString("en-GB", { day: "2-digit" }),
+      n: dayMatches.length,
+      hours,
+      range,
+    };
+  });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 20 }}>
+      {days.map((d) => {
+        const active = d.o === offset;
+        return (
+          <button
+            key={d.o}
+            onClick={() => onChange(d.o)}
+            className="zs-block"
+            style={{
+              textAlign: "left",
+              padding: "14px 16px",
+              cursor: "pointer",
+              background: active ? "var(--zs-bg-elev)" : "var(--zs-bg)",
+              borderColor: active ? "var(--zs-accent)" : "var(--zs-border)",
+              position: "relative",
+              color: "inherit",
+            }}
+          >
+            {active && (
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "var(--zs-accent)" }} />
+            )}
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                color: active ? "var(--zs-accent)" : "var(--zs-fg-muted)",
+                letterSpacing: "0.16em",
+                marginBottom: 8,
+              }}
+            >
+              {d.day} {d.dt} · {d.o === 0 ? "TODAY" : `+${d.o}D`}
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--font-display)",
+                fontWeight: 800,
+                fontSize: 38,
+                color: d.n > 0 ? (active ? "var(--zs-fg)" : "var(--zs-fg-dim)") : "var(--zs-fg-faint)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+                marginBottom: 10,
+              }}
+            >
+              {d.n}
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <HourStrip active={d.hours} />
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                color: "var(--zs-fg-muted)",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {d.range ?? "no fixtures"}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterBar({
+  status,
+  sort,
+  onStatus,
+  onSort,
+  showing,
+}: {
+  status: StatusFilter;
+  sort: SortKey;
+  onStatus: (s: StatusFilter) => void;
+  onSort: (s: SortKey) => void;
+  showing: number;
+}) {
+  const statuses: StatusFilter[] = ["all", "scheduled", "live", "ft"];
+  return (
+    <div
+      className="zs-block"
+      style={{
+        padding: "10px 14px",
+        marginBottom: 16,
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        flexWrap: "wrap",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="zs-caption">STATUS</span>
+        {statuses.map((s) => {
+          const active = status === s;
+          return (
+            <button
+              key={s}
+              onClick={() => onStatus(s)}
+              style={{
+                padding: "4px 10px",
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.10em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                border: "1px solid",
+                borderColor: active ? "var(--zs-accent)" : "var(--zs-border)",
+                background: active ? "var(--zs-accent-fill)" : "transparent",
+                color: active ? "var(--zs-accent)" : "var(--zs-fg-dim)",
+              }}
+            >
+              {s}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ width: 1, height: 18, background: "var(--zs-border)" }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="zs-caption">SORT</span>
+        <select
+          className="zs-input"
+          style={{ height: 24, fontSize: 10, padding: "0 8px" }}
+          value={sort}
+          onChange={(e) => onSort(e.target.value as SortKey)}
+        >
+          <option value="kickoff">KICKOFF ↑</option>
+          <option value="league">LEAGUE</option>
+          <option value="status">STATUS</option>
+        </select>
+      </div>
+      <div style={{ flex: 1 }} />
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 10,
+          color: "var(--zs-fg-muted)",
+          letterSpacing: "0.08em",
+        }}
+      >
+        SHOWING {showing}
+      </div>
+    </div>
+  );
+}
+
+function NextUpStrip({ match }: { match: CatalogMatch }) {
+  const league = findLeagueById(String(match.leagueId));
+  const cc = league?.countryCode ?? match.countryCode ?? "—";
+  const leagueName = league?.name ?? match.leagueName;
+  const t = new Date(match.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div
+      className="zs-block"
+      style={{
+        padding: "14px 18px",
+        marginBottom: 16,
+        display: "flex",
+        alignItems: "center",
+        gap: 18,
+        borderColor: "var(--zs-accent)",
+        flexWrap: "wrap",
+      }}
+    >
+      <Tag tone="amber" solid>
+        ▸ NEXT UP
+      </Tag>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, color: "var(--zs-fg)" }}>
+          {match.home.name}
+        </span>
+        <span style={{ color: "var(--zs-fg-muted)", fontSize: 11 }}>vs</span>
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, color: "var(--zs-fg)" }}>
+          {match.away.name}
+        </span>
+      </div>
+      <div style={{ flex: 1 }} />
+      <FlagChip cc={cc} />
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--zs-fg-dim)" }}>{leagueName}</span>
+      <span className="tabnum" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--zs-fg)" }}>
+        {t} · in {formatRelativeShort(match.kickoffAt)}
+      </span>
+      <Link
+        to={`/match/${match.catalogId}`}
+        className="zs-btn sm primary"
+        style={{ textDecoration: "none" }}
+      >
+        ANALYSE →
+      </Link>
+    </div>
+  );
+}
+
+function LeagueBlock({ group }: { group: LeagueGroup }) {
+  const first = group.matches[0];
+  const last = group.matches[group.matches.length - 1];
+  const tFirst = new Date(first.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const tLast = new Date(last.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const range = group.matches.length > 1 ? `${tFirst}–${tLast}` : tFirst;
+
+  return (
+    <Block
+      head={
+        <>
+          <FlagChip cc={group.countryCode} />{" "}
+          <strong style={{ color: "var(--zs-fg)" }}>{group.leagueName}</strong>
+        </>
+      }
+      headRight={
+        <>
+          <span style={{ fontSize: 10, color: "var(--zs-fg-muted)" }}>
+            {group.matches.length} fixt · {range}
+          </span>
+          <Tag>{group.matches.length}</Tag>
+        </>
+      }
+      pad={false}
+      style={{ marginBottom: 14 }}
+    >
+      {group.matches.map((m, i, arr) => (
+        <Link
+          key={m.catalogId}
+          to={`/match/${m.catalogId}`}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "70px 1fr 120px 90px 80px",
+            gap: 14,
+            alignItems: "center",
+            padding: "12px 16px",
+            borderBottom: i < arr.length - 1 ? "1px solid var(--zs-rule)" : "none",
+            textDecoration: "none",
+            color: "inherit",
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                color: "var(--zs-fg)",
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                fontFamily: "var(--font-display)",
+              }}
+            >
+              {new Date(m.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </div>
+            <div style={{ color: "var(--zs-fg-muted)", fontSize: 9, letterSpacing: "0.08em" }}>
+              IN {formatRelativeShort(m.kickoffAt).toUpperCase()}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "var(--zs-fg)", fontSize: 13, fontWeight: 600 }}>
+              {m.home.name} <span style={{ color: "var(--zs-fg-muted)", fontWeight: 400 }}>vs</span> {m.away.name}
+            </div>
+            <div
+              style={{
+                color: "var(--zs-fg-muted)",
+                fontSize: 10,
+                marginTop: 2,
+                letterSpacing: "0.06em",
+              }}
+            >
+              {new Date(m.kickoffAt).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" }).toUpperCase()}
+            </div>
+          </div>
+          <div>
+            <span className="zs-caption" style={{ fontSize: 9 }}>STATUS</span>
+            <div style={{ color: "var(--zs-fg-dim)", fontSize: 12, fontWeight: 600, marginTop: 2 }}>
+              {m.status}
+            </div>
+          </div>
+          <Tag>{m.source.toUpperCase()}</Tag>
+          <button className="zs-btn sm" style={{ marginLeft: "auto" }}>
+            ANALYSE →
+          </button>
+        </Link>
+      ))}
+    </Block>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="zs-block" style={{ padding: 18 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="shimmer"
+          style={{
+            height: 40,
+            marginBottom: 6,
+            borderTop: "1px solid var(--zs-rule)",
+            borderBottom: "1px solid var(--zs-rule)",
+          }}
+        />
+      ))}
     </div>
   );
 }

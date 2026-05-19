@@ -23,13 +23,30 @@ export interface CombinedSignal {
   meta: BondedMeta;
 }
 
+/** Apply 1/√N decorrelation discount when multiple rules of the same family
+ * fire in the same leg — prevents stacking when the rules share data sources
+ * (e.g. xG Poisson rules all derive from team xG → BTTS/DC/TTG outputs are
+ * highly correlated). Items without a family pass through with full weight. */
+const applyFamilyDiscount = (items: RuleOutput[]): { weight: number; strength: number }[] => {
+  const byFamily = new Map<string, number>();
+  for (const item of items) {
+    if (!item.family) continue;
+    byFamily.set(item.family, (byFamily.get(item.family) ?? 0) + 1);
+  }
+  return items.map((item) => {
+    const baseWeight = Math.max(0, item.weight);
+    if (!item.family) return { weight: baseWeight, strength: item.strength };
+    const count = byFamily.get(item.family) ?? 1;
+    const discount = count > 1 ? 1 / Math.sqrt(count) : 1;
+    return { weight: baseWeight * discount, strength: item.strength };
+  });
+};
+
 const legSignal = (items: RuleOutput[]): number => {
-  const weightSum = items.reduce((s, i) => s + Math.max(0, i.weight), 0);
+  const adjusted = applyFamilyDiscount(items);
+  const weightSum = adjusted.reduce((s, i) => s + i.weight, 0);
   if (weightSum <= 0) return 0;
-  const weighted = items.reduce(
-    (s, i) => s + i.strength * Math.max(0, i.weight),
-    0,
-  );
+  const weighted = adjusted.reduce((s, i) => s + i.strength * i.weight, 0);
   return clamp(weighted / weightSum, -1, 1);
 };
 

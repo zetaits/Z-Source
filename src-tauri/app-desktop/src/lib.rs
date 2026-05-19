@@ -39,6 +39,12 @@ pub fn run() {
             sql: include_str!("../../../src/storage/migrations/006_historical_odds.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "drop historical_odds (backtest removed)",
+            sql: include_str!("../../../src/storage/migrations/007_drop_historical_odds.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -1,6 +1,8 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/zs";
 import { CacheResetCard } from "@/features/settings/components/CacheResetCard";
 import { DataCard } from "@/features/settings/components/DataCard";
+import { DemoSeedCard } from "@/features/settings/components/DemoSeedCard";
 import { LeaguesPicker } from "@/features/settings/components/LeaguesPicker";
 import { OddsApiKeyCard } from "@/features/settings/components/OddsApiKeyCard";
 import { ProvidersCard } from "@/features/settings/components/ProvidersCard";
@@ -11,27 +13,27 @@ export function Settings() {
   const { data, loading, update } = useSettings();
 
   return (
-    <div className="flex h-full flex-col gap-6 p-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Configure providers and the leagues you want to scan. OddsAPI consumption only kicks in when you open a match.
-        </p>
-      </header>
+    <div style={{ padding: "28px 32px 48px" }}>
+      <ScreenHeader
+        bracket="SETTINGS · PROVIDERS · LEAGUES · DATA"
+        title="CONFIG"
+        sub="OddsAPI consumption only kicks in when you open a match"
+      />
 
       {loading || !data ? (
-        <div className="flex flex-col gap-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
       ) : (
-        <div className="flex max-w-4xl flex-col gap-5">
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 1080 }}>
           <OddsApiKeyCard settings={data} onUpdate={update} />
           <ProvidersCard settings={data} onUpdate={update} />
           <LeaguesPicker settings={data} onUpdate={update} />
           <StrategyCard />
           <DataCard />
+          {import.meta.env.DEV && <DemoSeedCard />}
           <CacheResetCard />
         </div>
       )}

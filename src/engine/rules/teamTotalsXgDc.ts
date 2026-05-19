@@ -79,6 +79,7 @@ export const teamTotalsXgDc: Rule = {
     return {
       ruleId: "ttg-xg-dc",
       leg: "matchup",
+      family: "poisson-xg",
       verdict: strength > 0 ? "SUPPORT" : "AGAINST",
       strength,
       weight: config.weight,
