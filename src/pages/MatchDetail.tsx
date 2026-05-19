@@ -162,7 +162,9 @@ export function MatchDetail() {
         )}
       </div>
 
-      <TabStrip active={activeTab} onChange={setActiveTab} />
+      <div data-tour-id="match-tabs">
+        <TabStrip active={activeTab} onChange={setActiveTab} />
+      </div>
 
       <div style={{ position: "relative", marginTop: 18 }}>
         {analysis.isFetching && <div className="scan-line" aria-hidden />}
@@ -375,7 +377,12 @@ function MatchHeaderPit({
                 <span style={{ width: 1, height: 14, background: "var(--zs-border)" }} />
               </>
             )}
-            <button className="zs-btn sm primary" onClick={onRun} disabled={isAnalyzing}>
+            <button
+              className="zs-btn sm primary"
+              onClick={onRun}
+              disabled={isAnalyzing}
+              data-tour-id="match-analyse"
+            >
               {analysisLabel}
             </button>
             {analysis?.resolution && (

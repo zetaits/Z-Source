@@ -129,7 +129,7 @@ export function Metrics() {
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 18, marginBottom: 22 }}>
+          <div data-tour-id="metrics-calibration" style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 18, marginBottom: 22 }}>
             <Block
               head="CALIBRATION · PRED vs REAL"
               headRight={<Tag tone="amber">{(calibration.data ?? []).filter((b) => b.n > 0).length} BUCKETS</Tag>}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import type { Bet, BetStatus } from "@/domain/bet";
 import type { BankrollSettings } from "@/domain/bankroll";
@@ -49,15 +49,26 @@ const STATUS_TONE: Record<BetStatus, string> = {
 interface Props {
   bets: Bet[];
   bankroll: BankrollSettings;
+  pageSize?: number;
 }
 
-export function BetsTable({ bets, bankroll }: Props) {
+const DEFAULT_PAGE_SIZE = 8;
+
+export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Props) {
   const settle = useSettleBet();
   const reopen = useReopenBet();
   const remove = useDeleteBet();
   const [editing, setEditing] = useState<Bet | null>(null);
   const [reopenTarget, setReopenTarget] = useState<Bet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Bet | null>(null);
+  const [visibleCount, setVisibleCount] = useState(pageSize);
+
+  useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [pageSize]);
+
+  const visibleBets = bets.slice(0, visibleCount);
+  const remaining = bets.length - visibleBets.length;
 
   if (bets.length === 0) {
     return (
@@ -104,7 +115,7 @@ export function BetsTable({ bets, bankroll }: Props) {
   return (
     <>
       <div className="overflow-hidden rounded-lg border bg-card">
-        <Table>
+        <Table className="zs-table">
           <TableHeader>
             <TableRow>
               <TableHead className="w-28">Placed</TableHead>
@@ -118,7 +129,7 @@ export function BetsTable({ bets, bankroll }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bets.map((b) => {
+            {visibleBets.map((b) => {
               const pnl = profitMinor(b);
               const pnlTone =
                 b.status === "OPEN"
@@ -237,6 +248,25 @@ export function BetsTable({ bets, bankroll }: Props) {
             })}
           </TableBody>
         </Table>
+        {remaining > 0 && (
+          <div className="relative">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-card to-transparent"
+            />
+            <div className="flex justify-center py-2">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((v) => v + pageSize)}
+                title={`Load ${Math.min(pageSize, remaining)} more · ${visibleBets.length}/${bets.length}`}
+                aria-label={`Load ${Math.min(pageSize, remaining)} more bets`}
+                className="inline-flex h-6 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:border-border/80 hover:bg-muted hover:text-foreground"
+              >
+                <ChevronDown className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {editing && (

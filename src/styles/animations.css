@@ -1,0 +1,236 @@
+/* ========================================================================
+   Z-SOURCE — Motion layer
+   Brutalist snap. Short durations, hard easing, mechanical feel.
+   Easing of choice: cubic-bezier(.2,.7,.1,1) — fast attack, late settle.
+   Reduced-motion respected at bottom of file.
+
+   Adapted from design_handoff_motion_layer/animations.css.
+   Tokens remapped: --accent → --zs-accent, --fg → --zs-fg, etc.
+   ========================================================================
+*/
+
+:root {
+  --ease-snap:   cubic-bezier(.2, .7, .1, 1);
+  --ease-linear: linear;
+  --d-tap:      90ms;     /* button press / hover */
+  --d-quick:    140ms;    /* focus / row hover / state flip */
+  --d-mount:    220ms;    /* element enters viewport */
+  --d-draw:     560ms;    /* svg trace */
+  --d-count:    520ms;    /* counter wind-up */
+}
+
+/* ───────── ENTER / MOUNT ──────────────────────────────────────────────── */
+
+@keyframes zs-enter-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.zs-enter-up {
+  animation: zs-enter-up var(--d-mount) var(--ease-snap) both;
+}
+
+@keyframes zs-enter-flicker {
+  0%   { opacity: 0; }
+  20%  { opacity: 0.6; }
+  35%  { opacity: 0.15; }
+  55%  { opacity: 0.9; }
+  100% { opacity: 1; }
+}
+.zs-flicker { animation: zs-enter-flicker 260ms steps(8, end) both; }
+
+/* page-level: applies to anything that mounts with key={page} */
+.zs-page-enter {
+  animation: zs-enter-up var(--d-mount) var(--ease-snap) both;
+}
+
+/* stagger helper — set --i on each child */
+.zs-stagger > * {
+  animation: zs-enter-up var(--d-mount) var(--ease-snap) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+/* ───────── STAMP-IN (badges, verdicts, check marks) ───────────────────── */
+
+@keyframes zs-stamp {
+  0%   { transform: scale(0.55); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.zs-stamp {
+  animation: zs-stamp 200ms var(--ease-snap) both;
+  transform-origin: center;
+}
+
+/* ───────── SVG TRACE — sparklines / charts draw progressively ─────────── */
+
+@keyframes zs-trace { to { stroke-dashoffset: 0; } }
+.zs-trace {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: zs-trace var(--d-draw) var(--ease-snap) both;
+}
+.zs-trace.delay-1 { animation-delay: 80ms; }
+.zs-trace.delay-2 { animation-delay: 160ms; }
+
+@keyframes zs-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.zs-fade-in { animation: zs-fade-in 320ms var(--ease-snap) both; animation-delay: 360ms; }
+
+/* ───────── COUNTER (used via JS hook, no CSS needed) ──────────────────── */
+/* (handled in components/zs/CountUp.tsx) */
+
+/* ───────── BUTTON polish ─────────────────────────────────────────────── */
+
+.zs-btn {
+  transition:
+    background-color var(--d-tap) var(--ease-linear),
+    border-color     var(--d-tap) var(--ease-linear),
+    color            var(--d-tap) var(--ease-linear),
+    transform        var(--d-tap) var(--ease-snap);
+}
+.zs-btn:active { transform: translateY(1px) scale(0.985); }
+.zs-btn.primary:active {
+  /* hard inverse flash on press */
+  background: var(--zs-fg);
+  border-color: var(--zs-fg);
+  color: var(--zs-bg);
+}
+
+/* ───────── INPUT focus ───────────────────────────────────────────────── */
+
+.zs-input {
+  transition:
+    border-color var(--d-quick) var(--ease-linear),
+    background   var(--d-quick) var(--ease-linear);
+}
+.zs-input:focus {
+  border-color: var(--zs-accent);
+  background: var(--zs-surface-2);
+}
+/* caret-color so cursor matches accent */
+.zs-input { caret-color: var(--zs-accent); }
+
+/* ───────── TOGGLE / CHECK snap ──────────────────────────────────────── */
+
+.zs-toggle::after {
+  transition:
+    transform 140ms var(--ease-snap),
+    background 100ms var(--ease-linear);
+}
+.zs-check.on::after { animation: zs-stamp 180ms var(--ease-snap); }
+
+/* ───────── TABLE rows — hover with accent stripe ─────────────────────── */
+
+.zs-table tbody tr {
+  transition:
+    background-color var(--d-quick) var(--ease-linear),
+    color            var(--d-quick) var(--ease-linear),
+    box-shadow       var(--d-quick) var(--ease-linear);
+}
+.zs-table tbody tr:hover {
+  box-shadow: inset 2px 0 0 var(--zs-accent);
+}
+
+/* ───────── TAGS ──────────────────────────────────────────────────────── */
+
+.zs-tag {
+  transition:
+    background-color var(--d-tap) var(--ease-linear),
+    color            var(--d-tap) var(--ease-linear),
+    border-color     var(--d-tap) var(--ease-linear);
+}
+
+/* ───────── PROGRESS BAR grow ─────────────────────────────────────────── */
+
+@keyframes zs-bar-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.zs-bar > span {
+  transition: width 300ms var(--ease-snap);
+  transform-origin: left center;
+  animation: zs-bar-grow 420ms var(--ease-snap) both;
+}
+
+/* ───────── SCAN — used on selected rows / armed cards ────────────────── */
+
+@keyframes zs-scan {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  40%  { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+.zs-scan-host { position: relative; overflow: hidden; }
+.zs-scan-host::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 35%;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--zs-accent-fill) 40%,
+    var(--zs-amber-fill-2) 50%,
+    var(--zs-accent-fill) 60%,
+    transparent 100%);
+  pointer-events: none;
+  animation: zs-scan 1100ms var(--ease-snap) 1;
+}
+
+/* ───────── SHAKE — for first-time alerts / errors ────────────────────── */
+
+@keyframes zs-shake {
+  0%, 100% { transform: translateX(0); }
+  15%      { transform: translateX(-3px); }
+  35%      { transform: translateX(3px); }
+  55%      { transform: translateX(-2px); }
+  75%      { transform: translateX(2px); }
+}
+.zs-shake { animation: zs-shake 280ms var(--ease-snap) both; }
+
+/* ───────── SIDEBAR active indicator ──────────────────────────────────── */
+
+.zs-nav-item {
+  position: relative;
+  transition:
+    background-color var(--d-quick) var(--ease-linear),
+    color            var(--d-quick) var(--ease-linear);
+}
+.zs-nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--zs-accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--d-quick) var(--ease-snap);
+}
+.zs-nav-item.active::before { transform: scaleY(1); }
+.zs-nav-item .zs-nav-chev {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity   var(--d-quick) var(--ease-snap),
+    transform var(--d-quick) var(--ease-snap);
+}
+.zs-nav-item.active .zs-nav-chev {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ───────── TICKER — keep existing, just expose pause-on-hover ─────────── */
+
+.zs-ticker { will-change: transform; }
+.zs-ticker:hover { animation-play-state: paused; }
+
+/* ───────── REDUCED MOTION GUARD ──────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+  .zs-ticker { animation: none !important; }
+}

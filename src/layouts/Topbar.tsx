@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { CountUp } from "@/components/zs/CountUp";
 import { clvPct, profitMinor } from "@/domain/bet";
 import { formatMoney } from "@/lib/money";
 import {
@@ -7,6 +8,7 @@ import {
 } from "@/features/bankroll/hooks/useBankroll";
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { ThemeMenu } from "@/features/tweaks/ThemeMenu";
+import { HelpMenu } from "@/features/help/HelpMenu";
 import { isPersistentStorage } from "@/storage";
 
 interface Props {
@@ -71,7 +73,7 @@ export function Topbar({ onOpenPalette }: Props) {
           minWidth: 200,
         }}
       >
-        <span className="zs-pulse" style={{ width: 7, height: 7, background: "var(--zs-pos)" }} aria-hidden />
+        <span style={{ width: 7, height: 7, background: "var(--zs-pos)" }} aria-hidden />
         <span
           className="tabnum"
           style={{
@@ -99,6 +101,7 @@ export function Topbar({ onOpenPalette }: Props) {
         type="button"
         onClick={onOpenPalette}
         aria-label="Open command palette"
+        data-tour-id="topbar-search"
         style={{
           flex: 1,
           display: "flex",
@@ -127,23 +130,27 @@ export function Topbar({ onOpenPalette }: Props) {
         <div style={{ display: "flex", alignItems: "stretch" }}>
           <KpiCell
             label="BANKROLL"
-            value={balanceQ.data !== undefined ? formatMoney(balanceQ.data, currency) : "—"}
+            value={balanceQ.data ?? null}
             tone="fg"
+            format={(n) => formatMoney(n, currency)}
           />
           <KpiCell
             label="EXPOSURE"
-            value={exposureQ.data !== undefined ? formatMoney(exposureQ.data, currency) : "€0.00"}
+            value={exposureQ.data ?? 0}
             tone={(exposureQ.data ?? 0) > 0 ? "info" : "muted"}
+            format={(n) => formatMoney(n, currency)}
           />
           <KpiCell
             label="CLV·30D"
-            value={clvAvg === null ? "—" : `${clvAvg >= 0 ? "+" : ""}${(clvAvg * 100).toFixed(2)}%`}
+            value={clvAvg}
             tone={clvAvg === null ? "muted" : clvAvg >= 0 ? "pos" : "neg"}
+            format={(n) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`}
           />
           <KpiCell
             label="ROI"
-            value={roi30d === null ? "—" : `${roi30d >= 0 ? "+" : ""}${(roi30d * 100).toFixed(2)}%`}
+            value={roi30d}
             tone={roi30d === null ? "muted" : roi30d >= 0 ? "pos" : "neg"}
+            format={(n) => `${n >= 0 ? "+" : ""}${(n * 100).toFixed(2)}%`}
           />
         </div>
       ) : (
@@ -162,6 +169,7 @@ export function Topbar({ onOpenPalette }: Props) {
         </div>
       )}
 
+      <HelpMenu />
       <ThemeMenu />
     </header>
   );
@@ -169,12 +177,29 @@ export function Topbar({ onOpenPalette }: Props) {
 
 type Tone = "fg" | "pos" | "neg" | "info" | "muted";
 
-function KpiCell({ label, value, tone }: { label: string; value: string; tone: Tone }) {
+function KpiCell({
+  label,
+  value,
+  tone,
+  format,
+}: {
+  label: string;
+  value: number | null;
+  tone: Tone;
+  format: (n: number) => string;
+}) {
   const color =
     tone === "pos" ? "var(--zs-pos)" :
     tone === "neg" ? "var(--zs-neg)" :
     tone === "info" ? "var(--zs-info)" :
     tone === "muted" ? "var(--zs-fg-muted)" : "var(--zs-fg)";
+  const valueStyle: CSSProperties = {
+    fontFamily: "var(--font-display)",
+    fontWeight: 700,
+    fontSize: 14,
+    color,
+    letterSpacing: "-0.01em",
+  };
   return (
     <div
       style={{
@@ -197,18 +222,17 @@ function KpiCell({ label, value, tone }: { label: string; value: string; tone: T
       >
         {label}
       </div>
-      <div
-        className="tabnum"
-        style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: 700,
-          fontSize: 14,
-          color,
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {value}
-      </div>
+      {value === null ? (
+        <div className="tabnum" style={valueStyle}>—</div>
+      ) : (
+        <CountUp
+          className="tabnum"
+          style={valueStyle}
+          value={value}
+          format={format}
+          duration={620}
+        />
+      )}
     </div>
   );
 }

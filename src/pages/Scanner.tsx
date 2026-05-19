@@ -146,7 +146,9 @@ export function Scanner() {
         </div>
       )}
 
-      <DayStrip fixtures={fixtures.data} offset={offset} onChange={setOffset} />
+      <div data-tour-id="scanner-list">
+        <DayStrip fixtures={fixtures.data} offset={offset} onChange={setOffset} />
+      </div>
 
       <FilterBar
         status={filters.status}

@@ -1,20 +1,5 @@
-import { useState, useEffect } from "react";
-import { Globe2, Info } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { useEffect, useState } from "react";
+import { Block, Tag } from "@/components/zs";
 import {
   HISTORY_PROVIDER_IDS,
   SPLIT_PROVIDER_IDS,
@@ -29,10 +14,10 @@ interface Props {
 }
 
 const REGIONS: { value: AppSettings["oddsRegion"]; label: string }[] = [
-  { value: "eu", label: "Europe (eu)" },
-  { value: "uk", label: "United Kingdom (uk)" },
-  { value: "us", label: "United States (us)" },
-  { value: "au", label: "Australia (au)" },
+  { value: "eu", label: "EUROPE (EU)" },
+  { value: "uk", label: "UNITED KINGDOM (UK)" },
+  { value: "us", label: "UNITED STATES (US)" },
+  { value: "au", label: "AUSTRALIA (AU)" },
 ];
 
 const SPLIT_PROVIDER_LABEL: Record<SplitProviderId, string> = {
@@ -43,51 +28,87 @@ const HISTORY_PROVIDER_LABEL: Record<HistoryProviderId, string> = {
   sofascore: "SofaScore (scraping)",
 };
 
-const USER_BOOKS_HELP =
-  "Comma-separated bookmaker names as listed by odds-api.io (e.g. Bet365, Sbobet, Unibet — capitalization matters). " +
-  "Edge is computed using only those books. Leave empty to use best price across all books.";
-const SPLITS_HELP =
-  "Action Network's public JSON API (money-line tickets/money %). Cached 10 min per match.";
-const HISTORY_HELP =
-  "`sofascore` scrapes public endpoints for team form, H2H, and rest days. " +
-  "Caches: form 6h, H2H 7d, intangibles 1h.";
-const FDORG_HELP =
-  "football-data.org API key. Free tier: 10 req/min. Covers PL, LaLiga, Serie A, Bundesliga, " +
-  "Ligue 1, Eredivisie, Primeira Liga, Championship, UCL. " +
-  "When configured: main leagues load instantly via 1 API call instead of scraping SofaScore. " +
-  "Also enables cleaner H2H data for those leagues.";
+const captionStyle = { fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--zs-fg-muted)" } as const;
+const rowStyle = { display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--zs-rule)" } as const;
 
-function FieldLabel({ text, help }: { text: string; help: string }) {
+export function ProvidersCard({ settings }: Props) {
+  const catalogValue = settings.footballDataApiKey ? "football-data" : "sofascore";
+
+  const chain: { name: string; kind: string; status: "ok" | "warn" | "off"; statusLabel: string }[] = [
+    {
+      name: catalogValue === "football-data" ? "football-data.org + SofaScore" : "SofaScore",
+      kind: "CATALOG",
+      status: catalogValue === "football-data" ? "ok" : "warn",
+      statusLabel: catalogValue === "football-data" ? "OK" : "SCRAPING",
+    },
+    {
+      name: "odds-api.io",
+      kind: "ODDS",
+      status: settings.oddsApiIoKey ? "ok" : "off",
+      statusLabel: settings.oddsApiIoKey ? "OK" : "NO KEY",
+    },
+    {
+      name: SPLIT_PROVIDER_LABEL[settings.splitProviderId],
+      kind: "SPLITS",
+      status: "ok",
+      statusLabel: "OK",
+    },
+    {
+      name: HISTORY_PROVIDER_LABEL[settings.historyProviderId],
+      kind: "HISTORY",
+      status: "ok",
+      statusLabel: "OK",
+    },
+  ];
+
   return (
-    <div className="flex items-center gap-1.5">
-      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-        {text}
-      </Label>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="text-muted-foreground/60 transition-colors hover:text-foreground"
-            aria-label={`${text} info`}
-          >
-            <Info className="size-3" aria-hidden />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs text-xs leading-snug">
-          {help}
-        </TooltipContent>
-      </Tooltip>
-    </div>
+    <Block head="PROVIDERS · FALLBACK CHAIN" pad={false}>
+      <table className="zs-table">
+        <thead>
+          <tr>
+            <th>PROVIDER</th>
+            <th style={{ width: 100 }}>KIND</th>
+            <th className="num" style={{ width: 80 }}>USED</th>
+            <th style={{ width: 180 }}>QUOTA</th>
+            <th style={{ width: 100 }}>STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chain.map((row) => (
+            <tr key={`${row.kind}-${row.name}`}>
+              <td className="row-key">{row.name}</td>
+              <td className="muted">{row.kind}</td>
+              <td className="num muted">—</td>
+              <td>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="zs-bar" style={{ width: 80 }}>
+                    <span style={{ width: row.status === "off" ? "0%" : "10%", background: "var(--zs-pos)" }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: "var(--zs-fg-muted)" }}>—</span>
+                </div>
+              </td>
+              <td>
+                <Tag tone={row.status === "ok" ? "pos" : row.status === "warn" ? "amber" : "neg"}>
+                  {row.statusLabel}
+                </Tag>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--zs-fg-muted)" }}>
+        Catalog scrapes SofaScore by default · pasting a football-data.org key promotes main leagues to the official API.
+      </div>
+    </Block>
   );
 }
 
-export function ProvidersCard({ settings, onUpdate }: Props) {
+export function ProviderConfigCard({ settings, onUpdate }: Props) {
   const [booksInput, setBooksInput] = useState((settings.userBooks ?? []).join(", "));
-  const [fdorgKeyInput, setFdorgKeyInput] = useState(settings.footballDataApiKey ?? "");
 
   useEffect(() => {
-    setFdorgKeyInput(settings.footballDataApiKey ?? "");
-  }, [settings.footballDataApiKey]);
+    setBooksInput((settings.userBooks ?? []).join(", "));
+  }, [settings.userBooks]);
 
   const handleBooksBlur = () => {
     const books = booksInput
@@ -97,133 +118,64 @@ export function ProvidersCard({ settings, onUpdate }: Props) {
     void onUpdate({ userBooks: books });
   };
 
-  const handleFdorgKeyBlur = () => {
-    void onUpdate({ footballDataApiKey: fdorgKeyInput.trim() || null });
-  };
-
   return (
-    <TooltipProvider delayDuration={200}>
-      <section className="rounded-lg border border-border bg-card/40 p-5">
-        <header className="mb-4 flex items-start gap-3">
-          <Globe2 className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
-          <div>
-            <h2 className="text-sm font-semibold">Providers</h2>
-            <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-              Catalog scrapes SofaScore. Odds, splits and history each have their own provider —
-              hover the info icons for cost, coverage and cache behaviour.
-            </p>
-          </div>
-        </header>
+    <Block head="PROVIDER CONFIG">
+      <div style={rowStyle}>
+        <span style={captionStyle}>ODDSAPI REGION</span>
+        <select
+          className="zs-input"
+          value={settings.oddsRegion}
+          onChange={(e) => void onUpdate({ oddsRegion: e.target.value as AppSettings["oddsRegion"] })}
+        >
+          {REGIONS.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
+          ))}
+        </select>
+      </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Catalog provider
-            </Label>
-            <Select disabled value={settings.footballDataApiKey ? "football-data" : "sofascore"}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="sofascore">SofaScore (scraping)</SelectItem>
-                <SelectItem value="football-data">football-data.org + SofaScore</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <div style={rowStyle}>
+        <span style={captionStyle}>SPLITS PROVIDER</span>
+        <select
+          className="zs-input"
+          value={settings.splitProviderId}
+          onChange={(e) => void onUpdate({ splitProviderId: e.target.value as SplitProviderId })}
+        >
+          {SPLIT_PROVIDER_IDS.map((id) => (
+            <option key={id} value={id}>{SPLIT_PROVIDER_LABEL[id]}</option>
+          ))}
+        </select>
+      </div>
 
-          <div className="grid gap-2">
-            <FieldLabel text="football-data.org API key" help={FDORG_HELP} />
-            <Input
-              type="password"
-              placeholder="Paste API key — free at football-data.org"
-              value={fdorgKeyInput}
-              onChange={(e) => setFdorgKeyInput(e.target.value)}
-              onBlur={handleFdorgKeyBlur}
-              className="font-mono text-xs"
-            />
-            {settings.footballDataApiKey && (
-              <p className="text-xs text-emerald-500/80">
-                Configured — main leagues load via official API (fast).
-              </p>
-            )}
-          </div>
+      <div style={rowStyle}>
+        <span style={captionStyle}>HISTORY PROVIDER</span>
+        <select
+          className="zs-input"
+          value={settings.historyProviderId}
+          onChange={(e) => void onUpdate({ historyProviderId: e.target.value as HistoryProviderId })}
+        >
+          {HISTORY_PROVIDER_IDS.map((id) => (
+            <option key={id} value={id}>{HISTORY_PROVIDER_LABEL[id]}</option>
+          ))}
+        </select>
+      </div>
 
-          <div className="grid gap-2">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              OddsAPI region
-            </Label>
-            <Select
-              value={settings.oddsRegion}
-              onValueChange={(v) => void onUpdate({ oddsRegion: v as AppSettings["oddsRegion"] })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REGIONS.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div style={{ ...rowStyle, borderBottom: "none" }}>
+        <span style={captionStyle}>BOOKS YOU OPERATE</span>
+        <input
+          className="zs-input"
+          placeholder="Bet365, Sbobet, Unibet  (empty = all books)"
+          value={booksInput}
+          onChange={(e) => setBooksInput(e.target.value)}
+          onBlur={handleBooksBlur}
+          style={{ fontFamily: "var(--font-mono)" }}
+        />
+      </div>
 
-          <div className="grid gap-2">
-            <FieldLabel text="Splits provider" help={SPLITS_HELP} />
-            <Select
-              value={settings.splitProviderId}
-              onValueChange={(v) => void onUpdate({ splitProviderId: v as SplitProviderId })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SPLIT_PROVIDER_IDS.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {SPLIT_PROVIDER_LABEL[id]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <FieldLabel text="History provider" help={HISTORY_HELP} />
-            <Select
-              value={settings.historyProviderId}
-              onValueChange={(v) => void onUpdate({ historyProviderId: v as HistoryProviderId })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HISTORY_PROVIDER_IDS.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {HISTORY_PROVIDER_LABEL[id]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="col-span-full grid gap-2">
-            <FieldLabel text="Books you operate" help={USER_BOOKS_HELP} />
-            <Input
-              placeholder="Bet365, Sbobet, Unibet  (empty = all books)"
-              value={booksInput}
-              onChange={(e) => setBooksInput(e.target.value)}
-              onBlur={handleBooksBlur}
-              className="font-mono text-xs"
-            />
-            {(settings.userBooks ?? []).length === 0 && (
-              <p className="text-xs text-amber-500/80">
-                No books configured — edge uses best price across all books (phantom edge possible).
-              </p>
-            )}
-          </div>
+      {(settings.userBooks ?? []).length === 0 && (
+        <div style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--zs-accent)" }}>
+          ⚠ No books configured · edge uses best price across all books (phantom edge possible).
         </div>
-      </section>
-    </TooltipProvider>
+      )}
+    </Block>
   );
 }

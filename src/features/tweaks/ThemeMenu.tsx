@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ACCENT_PALETTES, useTweaks } from "./TweaksContext";
 
 export function ThemeMenu() {
-  const { palette, setPalette } = useTweaks();
+  const { palette, setPalette, scanlines, setScanlines } = useTweaks();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const current = ACCENT_PALETTES.find((p) => p.id === palette) ?? ACCENT_PALETTES[0];
@@ -133,6 +133,74 @@ export function ThemeMenu() {
               </button>
             );
           })}
+
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 9,
+              color: "var(--zs-fg-muted)",
+              letterSpacing: "0.18em",
+              padding: "10px 8px 4px",
+            }}
+          >
+            ── CHROME ──
+          </div>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={scanlines}
+            onClick={() => setScanlines(!scanlines)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 10px",
+              background: "transparent",
+              border: "1px solid transparent",
+              cursor: "pointer",
+              textAlign: "left",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 18,
+                height: 14,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid var(--zs-border-bright)",
+                color: scanlines ? "var(--zs-accent)" : "transparent",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </span>
+            <span
+              style={{
+                flex: 1,
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                color: scanlines ? "var(--zs-accent)" : "var(--zs-fg-dim)",
+                letterSpacing: "0.10em",
+                fontWeight: 600,
+              }}
+            >
+              CRT SCANLINES
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 9,
+                color: scanlines ? "var(--zs-accent)" : "var(--zs-fg-faint)",
+                letterSpacing: "0.16em",
+              }}
+            >
+              {scanlines ? "ON" : "OFF"}
+            </span>
+          </button>
         </div>
       )}
     </div>

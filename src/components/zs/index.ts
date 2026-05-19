@@ -15,3 +15,4 @@ export { FlagChip } from "./FlagChip";
 export { Stat } from "./Stat";
 export type { StatTone } from "./Stat";
 export { Glyph } from "./Glyph";
+export { CountUp } from "./CountUp";

@@ -10,6 +10,7 @@ import {
   loadStrategy,
   saveEnabledMarkets,
   saveLegWeights,
+  saveMinLegsAlignedForBonded,
   saveStakePolicy,
 } from "@/features/match-detail/hooks/loadStrategy";
 import { isPersistentStorage } from "@/storage";
@@ -64,6 +65,13 @@ export const useStrategy = () => {
     onSuccess: invalidate,
   });
 
+  const minLegsMutation = useMutation({
+    mutationFn: async (n: number) => {
+      await saveMinLegsAlignedForBonded(n);
+    },
+    onSuccess: invalidate,
+  });
+
   return {
     strategy: query.data,
     loading: query.isLoading,
@@ -72,5 +80,6 @@ export const useStrategy = () => {
     setLegWeights: legWeightsMutation.mutate,
     setEnabledMarkets: marketsMutation.mutate,
     setRuleConfig: ruleMutation.mutate,
+    setMinLegsAlignedForBonded: minLegsMutation.mutate,
   };
 };

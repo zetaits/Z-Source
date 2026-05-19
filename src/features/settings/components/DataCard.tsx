@@ -1,7 +1,5 @@
 import { useRef, useState } from "react";
-import { Database, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Block } from "@/components/zs";
 import { loadStrategy } from "@/features/match-detail/hooks/loadStrategy";
 import {
   betsToCsv,
@@ -33,22 +32,29 @@ interface ImportPreview {
   errors: { line: number; message: string }[];
 }
 
+const rowStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "10px 0",
+  borderBottom: "1px solid var(--zs-rule)",
+  gap: 12,
+} as const;
+
+const titleStyle = { fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--zs-fg)", textTransform: "uppercase", letterSpacing: "0.08em" } as const;
+const subStyle = { fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--zs-fg-muted)", marginTop: 2 } as const;
+
 export function DataCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const enabled = isPersistentStorage();
 
   const onExportBets = async () => {
     setBusy("bets");
     try {
       const bets = await betsRepo.list({ limit: 10_000 });
-      triggerDownload(
-        `z-source-bets-${timestamp()}.csv`,
-        betsToCsv(bets),
-        "text/csv",
-      );
+      triggerDownload(`z-source-bets-${timestamp()}.csv`, betsToCsv(bets), "text/csv");
       toast.success(`Exported ${bets.length} bets`);
     } catch (err) {
       toast.error("Export failed", { description: (err as Error).message });
@@ -134,89 +140,96 @@ export function DataCard() {
   };
 
   return (
-    <section className="rounded-lg border border-border bg-card/40 p-5">
-      <header className="mb-4 flex items-start gap-3">
-        <Database className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
-        <div>
-          <h2 className="text-sm font-semibold">Data</h2>
-          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Export your bets, ledger and strategy config for backup or analysis. Import bets from a CSV (upsert by bet id).
-          </p>
-        </div>
-      </header>
-
+    <Block head="DATA · IMPORT / EXPORT">
       {!enabled && (
-        <p className="mb-4 rounded border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+        <div
+          style={{
+            padding: "10px 12px",
+            border: "1px solid var(--zs-accent)",
+            background: "var(--zs-accent-fill)",
+            color: "var(--zs-fg)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            marginBottom: 12,
+          }}
+        >
           Data actions require the Tauri desktop app (persistent storage).
-        </p>
+        </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Export
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
+      <div>
+        <div style={rowStyle}>
+          <div>
+            <div style={titleStyle}>BETS · CSV</div>
+            <div style={subStyle}>Full bet history with stake, odds, status, P/L.</div>
+          </div>
+          <button
+            type="button"
+            className="zs-btn sm"
             disabled={!enabled || busy !== null}
             onClick={() => void onExportBets()}
-            className="justify-start"
           >
-            <Download className="mr-2 size-3.5" />
-            Bets (CSV)
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!enabled || busy !== null}
-            onClick={() => void onExportLedger()}
-            className="justify-start"
-          >
-            <Download className="mr-2 size-3.5" />
-            Ledger (JSON)
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!enabled || busy !== null}
-            onClick={() => void onExportStrategy()}
-            className="justify-start"
-          >
-            <Download className="mr-2 size-3.5" />
-            Strategy (JSON)
-          </Button>
+            ↓ CSV
+          </button>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Import
-          </span>
-          <label className="contents">
+        <div style={rowStyle}>
+          <div>
+            <div style={titleStyle}>LEDGER · JSON</div>
+            <div style={subStyle}>All ledger entries + bankroll settings (currency, unit size).</div>
+          </div>
+          <button
+            type="button"
+            className="zs-btn sm"
+            disabled={!enabled || busy !== null}
+            onClick={() => void onExportLedger()}
+          >
+            ↓ JSON
+          </button>
+        </div>
+
+        <div style={rowStyle}>
+          <div>
+            <div style={titleStyle}>STRATEGY · JSON</div>
+            <div style={subStyle}>Stake policy, leg weights, rule config, markets, combo policy.</div>
+          </div>
+          <button
+            type="button"
+            className="zs-btn sm"
+            disabled={!enabled || busy !== null}
+            onClick={() => void onExportStrategy()}
+          >
+            ↓ JSON
+          </button>
+        </div>
+
+        <div style={{ ...rowStyle, borderBottom: "none" }}>
+          <div>
+            <div style={titleStyle}>IMPORT BETS · CSV</div>
+            <div style={subStyle}>
+              Same column layout as the export. Rows are upserted by <span style={{ color: "var(--zs-fg)" }}>id</span>; invalid rows are skipped.
+            </div>
+          </div>
+          <label>
             <input
               ref={fileInputRef}
               type="file"
               accept=".csv,text/csv"
-              className="hidden"
+              style={{ display: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) void onFilePicked(file);
               }}
             />
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              type="button"
+              className="zs-btn sm"
               disabled={!enabled || busy !== null}
               onClick={() => fileInputRef.current?.click()}
-              className="justify-start"
             >
-              <Upload className="mr-2 size-3.5" />
-              Bets from CSV
-            </Button>
+              ↑ FILE
+            </button>
           </label>
-          <p className="text-[11px] text-muted-foreground">
-            Same column layout as the CSV export. Rows are upserted by <span className="font-mono">id</span>; invalid rows are skipped with reasons.
-          </p>
         </div>
       </div>
 
@@ -263,6 +276,6 @@ export function DataCard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+    </Block>
   );
 }

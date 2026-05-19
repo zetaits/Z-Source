@@ -1,6 +1,4 @@
-import { Layers } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Block } from "@/components/zs";
 import { MARKETS } from "@/config/markets";
 import type { MarketKey } from "@/domain/market";
 import { MARKET_ADAPTERS } from "@/engine/markets";
@@ -17,53 +15,60 @@ export function MarketsCard({ enabled, disabled, onChange }: Props) {
   const set = new Set(enabled);
 
   const toggle = (key: MarketKey) => {
+    if (disabled) return;
     const next = new Set(set);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     onChange([...next]);
   };
 
-  return (
-    <section className="rounded-lg border border-border bg-card/40 p-5">
-      <header className="mb-4 flex items-start gap-3">
-        <Layers className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
-        <div>
-          <h2 className="text-sm font-semibold">Markets</h2>
-          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Markets the engine will scan for plays. Disabled markets are skipped entirely.
-          </p>
-        </div>
-      </header>
+  const onCount = descriptors.filter((m) => set.has(m.key)).length;
 
-      <div className="grid gap-2 sm:grid-cols-2">
+  return (
+    <Block head={`MARKETS · ${onCount}/${descriptors.length} ENABLED`}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
         {descriptors.map((m) => {
           const active = set.has(m.key);
-          const id = `market-${m.key}`;
           return (
             <label
               key={m.key}
-              htmlFor={id}
-              className="flex cursor-pointer items-start gap-3 rounded-md border border-border bg-background/40 p-3 text-sm transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                border: "1px solid var(--zs-border)",
+                background: "var(--zs-bg)",
+                cursor: disabled ? "not-allowed" : "pointer",
+                opacity: disabled ? 0.5 : 1,
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                toggle(m.key);
+              }}
             >
-              <Checkbox
-                id={id}
-                checked={active}
-                disabled={disabled}
-                onCheckedChange={() => toggle(m.key)}
+              <span
+                role="checkbox"
+                aria-checked={active}
+                className={`zs-check ${active ? "on" : ""}`}
               />
-              <div className="flex flex-1 flex-col gap-0.5">
-                <span className="font-medium">{m.label}</span>
-                <Label
-                  htmlFor={id}
-                  className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
-                >
-                  {m.key} · {m.group}
-                </Label>
-              </div>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 12,
+                  color: active ? "var(--zs-fg)" : "var(--zs-fg-muted)",
+                  flex: 1,
+                }}
+              >
+                {m.label}
+              </span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--zs-fg-muted)" }}>
+                {active ? "ON" : "OFF"}
+              </span>
             </label>
           );
         })}
       </div>
-    </section>
+    </Block>
   );
 }

@@ -1,6 +1,6 @@
-import { AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenHeader, Tag } from "@/components/zs";
+import { ComboPolicyCard } from "@/features/strategy/components/ComboPolicyCard";
 import { LegWeightsCard } from "@/features/strategy/components/LegWeightsCard";
 import { MarketsCard } from "@/features/strategy/components/MarketsCard";
 import { RulesCard } from "@/features/strategy/components/RulesCard";
@@ -16,6 +16,7 @@ export function Strategy() {
     setLegWeights,
     setEnabledMarkets,
     setRuleConfig,
+    setMinLegsAlignedForBonded,
   } = useStrategy();
 
   const disabled = !persistent;
@@ -35,9 +36,9 @@ export function Strategy() {
         <div
           style={{
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: "center",
             gap: 10,
-            padding: "12px 14px",
+            padding: "10px 12px",
             border: "1px solid var(--zs-accent)",
             background: "var(--zs-accent-fill)",
             color: "var(--zs-fg)",
@@ -46,10 +47,8 @@ export function Strategy() {
             marginBottom: 16,
           }}
         >
-          <AlertTriangle className="mt-0.5 size-4 flex-none" style={{ color: "var(--zs-accent)" }} aria-hidden />
-          <div>
-            Persistent storage unavailable (web preview). Edits won&apos;t stick — run the desktop app to calibrate.
-          </div>
+          <Tag tone="amber">⚠ PREVIEW</Tag>
+          <span>Persistent storage unavailable (web preview). Edits won&apos;t stick — run the desktop app to calibrate.</span>
         </div>
       )}
 
@@ -63,9 +62,18 @@ export function Strategy() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <StakePolicyCard policy={strategy.stakePolicy} disabled={disabled} onChange={setStakePolicy} />
-          <LegWeightsCard weights={strategy.legWeights} disabled={disabled} onChange={setLegWeights} />
+          <LegWeightsCard
+            weights={strategy.legWeights}
+            disabled={disabled}
+            onChange={setLegWeights}
+            minLegsAlignedForBonded={strategy.minLegsAlignedForBonded}
+            onMinLegsChange={setMinLegsAlignedForBonded}
+          />
+          <div data-tour-id="strategy-rules">
+            <RulesCard rules={strategy.rules} disabled={disabled} onChange={setRuleConfig} />
+          </div>
           <MarketsCard enabled={strategy.enabledMarkets} disabled={disabled} onChange={setEnabledMarkets} />
-          <RulesCard rules={strategy.rules} disabled={disabled} onChange={setRuleConfig} />
+          <ComboPolicyCard />
         </div>
       )}
     </div>

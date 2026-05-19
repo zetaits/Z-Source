@@ -82,6 +82,9 @@ export const saveComboPolicy = (policy: ComboPolicy): Promise<void> =>
 export const saveLegWeights = (weights: LegWeights): Promise<void> =>
   settingsRepo.set(K_LEG_WEIGHTS, weights);
 
+export const saveMinLegsAlignedForBonded = (n: number): Promise<void> =>
+  settingsRepo.set(K_MIN_LEGS_BONDED, n);
+
 export const saveEnabledMarkets = (markets: MarketKey[]): Promise<void> =>
   settingsRepo.set(K_ENABLED_MARKETS, markets);
 

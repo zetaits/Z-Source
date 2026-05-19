@@ -75,8 +75,8 @@ export function EquityChart({ points, height = 220, formatLabel }: Props) {
           </text>
         </g>
       ))}
-      <polygon points={fillPath} fill="var(--zs-accent)" opacity="0.10" />
-      <polyline points={pts} fill="none" stroke="var(--zs-accent)" strokeWidth="1.4" />
+      <polygon className="zs-fade-in" points={fillPath} fill="var(--zs-accent)" opacity="0.10" />
+      <polyline className="zs-trace" pathLength="1" points={pts} fill="none" stroke="var(--zs-accent)" strokeWidth="1.4" />
       {ptsArr.map(([x, y], i) =>
         i % Math.max(1, Math.floor(points.length / 16)) === 0 ? (
           <circle key={i} cx={x} cy={y} r="1.5" fill="var(--zs-accent)" />

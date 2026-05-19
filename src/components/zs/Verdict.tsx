@@ -20,6 +20,7 @@ export function Verdict({ v, big = false }: Props) {
   const s = STYLES[v] ?? STYLES.PASS;
   return (
     <span
+      className="zs-stamp"
       style={{
         fontFamily: "var(--font-mono)",
         fontSize: big ? "13px" : "11px",

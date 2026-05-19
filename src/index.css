@@ -3,6 +3,7 @@
 @import '@fontsource/jetbrains-mono/600.css';
 @import '@fontsource/jetbrains-mono/700.css';
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import './styles/animations.css';
 
 @tailwind base;
 @tailwind components;
@@ -172,8 +173,8 @@ body::before {
       0deg,
       transparent 0,
       transparent 2px,
-      rgba(255, 184, 77, 0.012) 2px,
-      rgba(255, 184, 77, 0.012) 3px
+      color-mix(in oklch, var(--zs-accent) 4%, transparent) 2px,
+      color-mix(in oklch, var(--zs-accent) 4%, transparent) 3px
     );
   pointer-events: none;
   z-index: 999;

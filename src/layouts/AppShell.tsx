@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { CommandPalette } from "@/features/palette/CommandPalette";
+import { TutorialProvider } from "@/features/help/TutorialContext";
+import { TutorialTour } from "@/features/help/TutorialTour";
+import { TOUR_STEPS } from "@/features/help/tourSteps";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Ticker } from "./Ticker";
@@ -24,6 +27,7 @@ function shouldIgnoreKey(target: EventTarget | null): boolean {
 export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -46,25 +50,30 @@ export function AppShell() {
   }, [navigate]);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100dvh",
-        width: "100%",
-        overflow: "hidden",
-        background: "var(--zs-bg)",
-        color: "var(--zs-fg)",
-      }}
-    >
-      <Sidebar />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Topbar onOpenPalette={() => setPaletteOpen(true)} />
-        <Ticker />
-        <main className="zs-scroll" style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
-          <Outlet />
-        </main>
+    <TutorialProvider totalSteps={TOUR_STEPS.length}>
+      <div
+        style={{
+          display: "flex",
+          height: "100dvh",
+          width: "100%",
+          overflow: "hidden",
+          background: "var(--zs-bg)",
+          color: "var(--zs-fg)",
+        }}
+      >
+        <Sidebar />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <Topbar onOpenPalette={() => setPaletteOpen(true)} />
+          <Ticker />
+          <main className="zs-scroll" style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
+            <div key={location.pathname} className="zs-page-enter" style={{ minHeight: "100%" }}>
+              <Outlet />
+            </div>
+          </main>
+        </div>
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        <TutorialTour />
       </div>
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-    </div>
+    </TutorialProvider>
   );
 }

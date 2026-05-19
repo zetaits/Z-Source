@@ -18,8 +18,8 @@ export function Sparkline({ points, w = 120, h = 32, color = "var(--zs-pos)", fi
   const fillPath = `0,${h} ${pts} ${w},${h}`;
   return (
     <svg width={w} height={h} style={{ display: "block", overflow: "visible" }}>
-      {fill && <polygon points={fillPath} fill={color} opacity="0.12" />}
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.4" />
+      {fill && <polygon className="zs-fade-in" points={fillPath} fill={color} opacity="0.12" />}
+      <polyline className="zs-trace" pathLength="1" points={pts} fill="none" stroke={color} strokeWidth="1.4" />
     </svg>
   );
 }

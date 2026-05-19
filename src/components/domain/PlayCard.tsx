@@ -1,9 +1,6 @@
-import { PlusCircle } from "lucide-react";
 import type { PlayCandidate } from "@/domain/play";
 import { marketByKey } from "@/config/markets";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ReasoningTrace } from "./ReasoningTrace";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -113,22 +110,17 @@ export function PlayCard({ play, onLogBet }: Props) {
             value={`${play.stakeUnits.toFixed(1)}u`}
             valueClass={play.stakeUnits > 0 ? "text-fg" : "text-fg-muted"}
           />
-          <div className="ml-auto">
-            <ReasoningTrace entries={play.trace} />
-          </div>
         </div>
 
-        {onLogBet && play.stakeUnits > 0 && (
+        {onLogBet && (
           <div className="mt-1 flex justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1.5 text-xs"
+            <button
+              type="button"
+              className={`zs-btn sm ${play.stakeUnits > 0 ? "primary" : ""}`}
               onClick={() => onLogBet(play)}
             >
-              <PlusCircle className="size-3.5" aria-hidden />
-              Log this bet
-            </Button>
+              + LOG BET
+            </button>
           </div>
         )}
       </div>

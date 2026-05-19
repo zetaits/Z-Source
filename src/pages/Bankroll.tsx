@@ -124,7 +124,7 @@ export function Bankroll() {
           </div>
 
           <Block head="EQUITY CURVE · 30D" pad={false} style={{ marginBottom: 22 }}>
-            <div style={{ padding: "16px 22px 12px" }}>
+            <div data-tour-id="bankroll-equity" style={{ padding: "16px 22px 12px" }}>
               <EquityChart
                 points={curve.map((p) => p.balanceMinor)}
                 height={240}

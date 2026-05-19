@@ -90,6 +90,8 @@ function MiniSpark({ pts, className }: { pts: number[]; className?: string }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={className}>
       <polyline
+        className="zs-trace"
+        pathLength="1"
         points={points}
         fill="none"
         stroke="var(--zs-pos)"

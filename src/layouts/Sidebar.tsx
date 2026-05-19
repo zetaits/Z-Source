@@ -120,14 +120,15 @@ function NavItem({ item }: { item: NavItemDef }) {
     <NavLink
       to={item.to}
       end={item.end}
+      className={({ isActive }) => `zs-nav-item${isActive ? " active" : ""}`}
       style={({ isActive }) => ({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         width: "100%",
         padding: "8px 18px",
+        paddingLeft: 20,
         background: isActive ? "var(--zs-accent-fill)" : "transparent",
-        borderLeft: isActive ? "2px solid var(--zs-accent)" : "2px solid transparent",
         color: isActive ? "var(--zs-accent)" : "var(--zs-fg-dim)",
         fontFamily: "var(--font-mono)",
         fontSize: 11,
@@ -140,8 +141,11 @@ function NavItem({ item }: { item: NavItemDef }) {
       {({ isActive }) => (
         <>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: isActive ? "var(--zs-accent)" : "var(--zs-fg-faint)" }}>
-              {isActive ? "▸" : " "}
+            <span
+              className="zs-nav-chev"
+              style={{ color: isActive ? "var(--zs-accent)" : "var(--zs-fg-faint)" }}
+            >
+              ▸
             </span>
             {item.label}
           </span>
@@ -224,7 +228,6 @@ function ProviderRow({ tracker }: { tracker: QuotaTracker }) {
     >
       <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--zs-fg-dim)", minWidth: 0 }}>
         <span
-          className="zs-pulse"
           style={{ width: 5, height: 5, background: tone, flexShrink: 0 }}
           aria-hidden
         />

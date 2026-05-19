@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { Scale } from "lucide-react";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
+import { Block } from "@/components/zs";
 import type { Leg, LegWeights } from "@/domain/strategy";
 import { DEFAULT_LEG_WEIGHTS } from "@/domain/strategy";
 
@@ -9,29 +7,29 @@ interface Props {
   weights: LegWeights;
   disabled?: boolean;
   onChange(weights: LegWeights): void;
+  /** Min positive legs to flag a pick as "bonded". Optional — defaults locally. */
+  minLegsAlignedForBonded?: number;
+  onMinLegsChange?(n: number): void;
 }
 
-const LEGS: { key: keyof LegWeights; label: string; hint: string }[] = [
-  { key: "matchup", label: "Matchup", hint: "Head-to-head quality, form-vs-form." },
-  { key: "trends", label: "Trends", hint: "Directional history and tempo cues." },
-  { key: "lines", label: "Lines", hint: "Line value, draws, structural mispricing." },
-  {
-    key: "sharpVsSquare",
-    label: "Sharp vs Square",
-    hint: "Money flow, reverse line movement, public fades.",
-  },
-  {
-    key: "intangibles",
-    label: "Intangibles",
-    hint: "Rest, congestion, motivation, absences.",
-  },
+const LEGS: { key: keyof LegWeights; label: string }[] = [
+  { key: "matchup", label: "MATCHUP" },
+  { key: "trends", label: "TRENDS" },
+  { key: "lines", label: "LINES" },
+  { key: "sharpVsSquare", label: "SHARP·SQUARE" },
+  { key: "intangibles", label: "INTANGIBLES" },
 ];
 
-export function LegWeightsCard({ weights, disabled, onChange }: Props) {
-  const [local, setLocal] = useState<LegWeights>(weights);
+const captionStyle = { fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--zs-fg-muted)" } as const;
+const valueStyle = { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, color: "var(--zs-accent)", fontVariantNumeric: "tabular-nums" } as const;
+
+const withDefaults = (w: LegWeights): LegWeights => ({ ...DEFAULT_LEG_WEIGHTS, ...w });
+
+export function LegWeightsCard({ weights, disabled, onChange, minLegsAlignedForBonded = 3, onMinLegsChange }: Props) {
+  const [local, setLocal] = useState<LegWeights>(() => withDefaults(weights));
 
   useEffect(() => {
-    setLocal(weights);
+    setLocal(withDefaults(weights));
   }, [weights]);
 
   const commit = (leg: Leg & keyof LegWeights, value: number) => {
@@ -44,63 +42,84 @@ export function LegWeightsCard({ weights, disabled, onChange }: Props) {
   const balanced = Math.abs(total - 1) <= 0.01;
 
   return (
-    <section className="rounded-lg border border-border bg-card/40 p-5">
-      <header className="mb-4 flex items-start gap-3">
-        <Scale className="mt-0.5 size-4 text-muted-foreground" aria-hidden />
-        <div className="flex-1">
-          <h2 className="text-sm font-semibold">Leg weights (Bonded)</h2>
-          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            How much each of the five Bonded legs contributes to the fair-prob shift. Weights are
-            relative — they don&apos;t have to sum to 1.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`font-tabular text-[11px] ${
-              balanced ? "text-muted-foreground" : "text-warning"
-            }`}
-          >
+    <Block
+      head="LEG WEIGHTS · BONDED COMBINATOR"
+      headRight={
+        <>
+          <span style={{ ...captionStyle, color: balanced ? "var(--zs-fg-muted)" : "var(--zs-accent)" }}>
             Σ {total.toFixed(2)}
           </span>
-          <Button
-            size="sm"
-            variant="ghost"
+          <button
+            type="button"
+            className="zs-btn sm ghost"
             disabled={disabled}
             onClick={() => {
               setLocal(DEFAULT_LEG_WEIGHTS);
               onChange(DEFAULT_LEG_WEIGHTS);
             }}
           >
-            Reset
-          </Button>
-        </div>
-      </header>
+            RESET
+          </button>
+        </>
+      }
+    >
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--zs-fg-muted)", margin: "0 0 16px" }}>
+        Relative pull each leg has on the fair-prob shift. Weights are normalized at runtime — they don&apos;t need to sum to 1.
+      </p>
 
-      <div className="grid gap-4">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14 }}>
         {LEGS.map((leg) => {
           const v = local[leg.key];
+          const pct = Math.round(v * 100);
           return (
-            <div key={leg.key} className="grid gap-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium">{leg.label}</span>
-                <span className="font-tabular text-xs text-muted-foreground">
-                  {v.toFixed(2)}
-                </span>
+            <div key={leg.key}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <span style={captionStyle}>{leg.label}</span>
+                <span style={valueStyle}>{v.toFixed(2)}</span>
               </div>
-              <Slider
-                value={[v]}
+              <input
+                type="range"
+                className="zs-slider"
                 min={0}
                 max={1}
                 step={0.05}
+                value={v}
                 disabled={disabled}
-                onValueChange={([next]) => commit(leg.key, next)}
+                onChange={(e) => commit(leg.key as Leg & keyof LegWeights, Number(e.target.value))}
                 aria-label={`${leg.label} weight`}
               />
-              <span className="text-[11px] text-muted-foreground">{leg.hint}</span>
+              <div className="zs-bar tall" style={{ marginTop: 8 }}>
+                <span style={{ width: `${pct}%` }} />
+              </div>
             </div>
           );
         })}
       </div>
-    </section>
+
+      <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--zs-rule)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={captionStyle}>BONDED FLOOR · MIN POS LEGS</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[2, 3, 4, 5].map((n) => {
+            const active = minLegsAlignedForBonded === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                disabled={disabled || !onMinLegsChange}
+                onClick={() => onMinLegsChange?.(n)}
+                className="zs-btn sm"
+                style={
+                  active
+                    ? { background: "var(--zs-accent)", color: "var(--zs-bg)", borderColor: "var(--zs-accent)", fontWeight: 700 }
+                    : undefined
+                }
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Block>
   );
 }

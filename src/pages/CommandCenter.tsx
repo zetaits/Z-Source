@@ -87,21 +87,23 @@ export function CommandCenter() {
 
   return (
     <div style={{ padding: "28px 32px 48px" }}>
-      <ScreenHeader
-        bracket={`COMMAND · ${dayLabel} · WINDOW NOW+72H`}
-        title="EDGE FLOOR"
-        sub={sub}
-        right={
-          <>
-            <Link to="/strategy" className="zs-btn ghost" style={{ textDecoration: "none" }}>
-              ◆ STRATEGY
-            </Link>
-            <Link to="/scanner" className="zs-btn primary" style={{ textDecoration: "none" }}>
-              OPEN SCANNER →
-            </Link>
-          </>
-        }
-      />
+      <div data-tour-id="command-center">
+        <ScreenHeader
+          bracket={`COMMAND · ${dayLabel} · WINDOW NOW+72H`}
+          title="EDGE FLOOR"
+          sub={sub}
+          right={
+            <>
+              <Link to="/strategy" className="zs-btn ghost" style={{ textDecoration: "none" }}>
+                ◆ STRATEGY
+              </Link>
+              <Link to="/scanner" className="zs-btn primary" style={{ textDecoration: "none" }}>
+                OPEN SCANNER →
+              </Link>
+            </>
+          }
+        />
+      </div>
 
       {/* HERO — NEXT WHISTLE */}
       {nextMatch && <NextWhistleHero match={nextMatch} />}
