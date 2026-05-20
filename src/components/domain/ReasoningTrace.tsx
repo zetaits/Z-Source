@@ -146,7 +146,7 @@ export function ReasoningTrace({ entries, className, defaultOpen = false }: Prop
                       {entry.verdict.toLowerCase()}
                     </span>
                     <span className="min-w-0 flex-1 text-fg-dim">{entry.message}</span>
-                    {entry.data?.pattern && (
+                    {entry.data?.pattern != null && (
                       <span
                         className="ml-auto shrink-0 rounded px-1 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em]"
                         style={{ background: "var(--zs-info-fill)", color: "var(--zs-info)" }}

@@ -69,7 +69,7 @@ export const createMatchResolver = (
         if (!best || score > best.score) best = { ev, score };
       }
       if (!best || best.score < cfg.minConfidence) {
-        return { matchId: null, confidence: best?.score ?? 0 };
+        return { matchId: null, confidence: best ? best.score : 0 };
       }
       return {
         matchId: best.ev.eventId as MatchId,
