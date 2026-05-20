@@ -37,7 +37,7 @@ export const TOUR_STEPS: TourStep[] = [
     targetId: "match-tabs",
     pathBuilder: ({ firstMatchId }) => (firstMatchId ? `/match/${firstMatchId}` : "/scanner"),
     title: "3 · DRILL THE LEGS",
-    body: "Seven tabs hold the per-leg breakdown: Picks (with reasoning trace), Lines, Matchup, Trends, Splits, Sentiment, Intangibles. Every signal is traceable.",
+    body: "Six tabs hold the per-leg breakdown: Picks (with reasoning trace), Lines (live odds board), Matchup, Trends, Market (crowd vs sharp + line movement), Intangibles. Every signal is traceable.",
     fallback: "Open a fixture from Scanner to inspect the tabs.",
   },
   {
