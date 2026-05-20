@@ -129,11 +129,13 @@ export function Metrics() {
             />
           </div>
 
-          <div data-tour-id="metrics-calibration" style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 18, marginBottom: 22 }}>
+          <div data-tour-id="metrics-calibration" style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 18, marginBottom: 22, height: 380 }}>
             <Block
               head="CALIBRATION · PRED vs REAL"
               headRight={<Tag tone="amber">{(calibration.data ?? []).filter((b) => b.n > 0).length} BUCKETS</Tag>}
               pad={false}
+              style={{ display: "flex", flexDirection: "column", minHeight: 0 }}
+              bodyStyle={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
             >
               <div style={{ padding: "12px 14px 8px" }}>
                 <CalibrationChart
@@ -167,7 +169,12 @@ export function Metrics() {
               </div>
             </Block>
 
-            <Block head="BREAKDOWN · MARKET × VERDICT" pad={false}>
+            <Block
+              head="BREAKDOWN · MARKET × VERDICT"
+              pad={false}
+              style={{ display: "flex", flexDirection: "column", minHeight: 0 }}
+              bodyStyle={{ flex: 1, minHeight: 0, overflow: "auto" }}
+            >
               <table className="zs-table">
                 <thead>
                   <tr>

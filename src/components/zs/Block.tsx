@@ -7,9 +7,11 @@ interface Props {
   pad?: boolean;
   className?: string;
   style?: CSSProperties;
+  bodyStyle?: CSSProperties;
 }
 
-export function Block({ head, headRight, children, pad = true, className = "", style }: Props) {
+export function Block({ head, headRight, children, pad = true, className = "", style, bodyStyle }: Props) {
+  const body: CSSProperties = { ...(pad ? {} : { padding: 0 }), ...(bodyStyle ?? {}) };
   return (
     <div className={`zs-block ${className}`} style={style}>
       {head !== undefined && (
@@ -18,7 +20,7 @@ export function Block({ head, headRight, children, pad = true, className = "", s
           {headRight !== undefined && <div className="r">{headRight}</div>}
         </div>
       )}
-      <div className="zs-block-body" style={pad ? undefined : { padding: 0 }}>
+      <div className="zs-block-body" style={body}>
         {children}
       </div>
     </div>

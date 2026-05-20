@@ -27,7 +27,6 @@ import { SplitsTab } from "@/features/match-detail/components/SplitsTab";
 import { SentimentTab } from "@/features/match-detail/components/SentimentTab";
 import { IntangiblesTab } from "@/features/match-detail/components/IntangiblesTab";
 import { ComboPlayCard } from "@/components/domain/ComboPlayCard";
-import { ComboDiagnosticsCard } from "@/features/match-detail/components/ComboDiagnosticsCard";
 import { ReasoningTrace } from "@/components/domain/ReasoningTrace";
 import { useMatch } from "@/features/match-detail/hooks/useMatch";
 import { useAnalysis } from "@/features/match-detail/hooks/useAnalysis";
@@ -520,6 +519,18 @@ function PicksPaneOrEmpty({
   const [selected, setSelected] = useState(0);
   const topPlay = plays[selected] ?? plays[0];
 
+  useEffect(() => {
+    if (!diagnostics) return;
+    if (combos.length > 0) return;
+    if (!diagnostics.combos && !diagnostics.anchorCombos) return;
+    // eslint-disable-next-line no-console
+    console.groupCollapsed("[combos] why no combos?");
+    if (diagnostics.combos) console.log("value combos:", diagnostics.combos);
+    if (diagnostics.anchorCombos) console.log("anchor combos:", diagnostics.anchorCombos);
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }, [diagnostics, combos.length]);
+
   if (isFetching && !ran) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -636,7 +647,6 @@ function PicksPaneOrEmpty({
                     ))}
                   </>
                 )}
-                {combos.length === 0 && diagnostics && <ComboDiagnosticsCard diagnostics={diagnostics} />}
               </>
             );
           })()}

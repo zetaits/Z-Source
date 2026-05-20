@@ -1,118 +1,140 @@
 # Z-Source
 
-Z-Source is an EV+ (Positive Expected Value) sports betting analytics desktop application. It identifies high-value plays by combining the proprietary **Bonded Betting Methodology** — a five-pillar evaluation across Matchup, Trends, Lines, Sharp vs. Square, and Intangibles — with a pluggable rule registry and fractional Kelly stake sizing.
+> A desktop terminal for football betting strategy — scan fixtures, build picks, track bankroll, measure calibration.
 
-The system runs locally as a Tauri 2 desktop app, aggregating odds from multiple providers, scraping public market splits and historical match data, modelling missing alt-lines via Dixon-Coles, and tracking every recommendation through a deterministic reasoning trace.
+Z-Source is a local-first desktop app that turns the messy parts of value betting into a clean, deterministic workflow. Pull a window of fixtures, run them through a configurable engine, place bets, and watch the math hold up (or not) over time.
 
-![Scanner view with picks list](docs/images/hero-scanner.png)
-
----
-
-## Key Capabilities
-
-### Bonded Analysis Engine
-The pipeline scores each candidate across five legs and combines them through a signed, capped consolidator that gates verdicts (`PASS` / `LEAN` / `PLAY` / `STRONG`) on bonded coverage (≥3 positive legs, no leg below −0.4 for `PLAY`+).
-
-* **Pluggable rule registry** — 15 active rules: `vigAdjustedEdge`, `drawValueAt375`, `lineMovementVsPublic`, `sharpSquareDetector` (unified 5-pattern detector: RLM, DOG_TRAP, DIVERGENCE, HEAVY_NO_DIV, PURE_FADE), `favFullMatchToFirstHalf`, `cornersHighTempo`, `xPointsRegression`, `xGMatchupAsymmetry`, `bttsXgPoisson`, `goalsTempoForm`, `doubleChanceDcModel`, `teamTotalsXgDc`, `formDivergence`, `h2hDominance`, `restCongestion`.
-* **Reasoning trace** — every recommendation emits a per-leg trace with rule-fired flags, pattern tags, data-missing markers, single-book pricing warnings, and bonded badge.
-* **Composite ranking** — picks sort by `edge × confidence`; bonded caps prevent any single signal from dominating.
-
-![Reasoning trace with bonded badge and five-leg breakdown](docs/images/match-detail-trace.png)
-
-**Diagnostics + Near-Misses** — empty-state cards surface why no plays fired (rules skipped, data gaps) and the top-3 PASS candidates ranked by `edge × confidence` for inspection.
-
-![Empty-state with diagnostics and near-misses cards](docs/images/empty-state.png)
-
-### Synthetic Alt-Lines (Dixon-Coles)
-When the book offers fewer lines than the engine wants to evaluate, Z-Source generates them itself.
-
-* **Power + Dixon-Coles** matrix from team xG produces fair probabilities for Over/Under and Asian Handicap alt-lines.
-* Synthetic offers enter the pipeline marked `book="synthetic-poisson"`; `vigAdjustedEdge` short-circuits to zero on them so signal comes from xG-based rules instead of phantom vig edges.
-* Noise thresholds (1.65% OU, 5.17% AH) prevent low-confidence synthetic lines from flooding the candidate list.
-
-![Market table with synth badge on Dixon-Coles lines](docs/images/synthetic-altlines.png)
-
-### Markets Supported
-* **Mains:** 1X2, Draw No Bet, Asian Handicap, Totals (O/U Goals), BTTS, 1H Match Result, Double Chance, Team Total Goals (home/away), BTTS halves (1H / 2H).
-* **Secondaries:** Total Corners, Team Corners, Total Cards, Total Shots, Shots on Target, GK Saves, Tackles, Throw-ins.
-
-### Combo Plays
-* **Value combos** — two-leg combinations with hardcoded correlation matrix (extended for DC, TTG, BTTS halves).
-* **Anchor combos** — boosts low-decimal legs (≤1.55, confidence ≥0.65, ρ ≥0.15) into the 1.60–2.20 sweet spot. UI distinguishes Value vs. Anchor sections per match.
-
-![Value and anchor combo cards](docs/images/match-detail-combos.png)
-
-### Multi-Provider Data Ingestion
-Strict fallback chain, quota tracking, local cache.
-
-* **Odds aggregation** — primary `odds-api.io` (100/h free tier; capped backfill: top 2 books × 3 markets × median line ≈ 6 req/match) with failover to `the-odds-api.com`. Single-book pricing mode filters offers to user-selected books and warns on phantom edges.
-* **Catalog + history** — SofaScore for fixtures, recent forms, H2H, congestion, and `/event/{id}/statistics` for xG ingestion. Requires browser TLS fingerprint (`preferBrowserFetch: true`); native curl/node hits 403.
-* **Action splits** — Action Network + SBR scraping for ticket/money percentages powering Sharp vs. Square detection.
-* **Quota tracker** — per-provider usage persisted in SQLite; UI surfaces remaining budget.
-
-### Telemetry & Calibration
-* `/metrics` page reads from `pick_outcomes` (auto-mirrored from `useLogBet` / `useSettleBet`).
-* KPI cards, summary table by `verdict × market`, and calibration scatter chart (recharts) plotting predicted probability vs. realised hit rate.
-
-![Metrics page with KPI cards and calibration scatter](docs/images/metrics-calibration.png)
-
-### Bankroll & Ledger
-* **Equity curve & yield** — ROI, units won/lost, active exposure.
-* **Closing Line Value** — captures final pre-kickoff odds for CLV-vs-bet analysis.
-* **Fractional Kelly** stake sizing with confidence multipliers and bonded caps.
-* **Portability** — full CSV / JSON import-export for ledger and strategies.
-
-![Bankroll equity curve with ROI and exposure](docs/images/bankroll-equity.png)
+![Z-Source — hero](docs/images/hero-scanner.png)
 
 ---
 
-## Technical Architecture
+## What it does
 
-Local-first Tauri 2 desktop binary; no remote backend.
+Z-Source is built around five places you spend time in:
 
-* **Frontend:** React 18, TypeScript, TailwindCSS, shadcn/ui, TanStack Query (with sync-storage persistence), `cmdk` palette, recharts.
-* **Backend glue:** Rust via Tauri 2 — `tauri-plugin-sql` (SQLite migrations), `tauri-plugin-store` (credentials), `tauri-plugin-http` (CORS-bypass for scraping).
-* **Engine:** pure TypeScript. Rules are 1 file + 1 line in the registry; markets are one `MarketAdapter` each.
-* **Validation:** Zod schemas on every provider response and engine output.
-* **Testing:** Vitest + Testing Library + MSW + fast-check. Engine suite covers rules, markets, combine, pipeline, synthetic, and provider fallbacks.
-
-![Strategy page — stake policy, leg weights, markets, rules](docs/images/strategy-page.png)
-
-![Settings → StrategyCard — combo policy and book filter](docs/images/settings-strategy.png)
-
----
-
-## More Views
-
-| View | Image |
-| --- | --- |
-| `cmdk` command palette | `docs/images/palette.png` |
-| Scanner tab close-up | `docs/images/scanner.png` |
-
----
-
-## Local Development
-
-### Prerequisites
-* Node.js 18+
-* Rust toolchain (cargo, rustc)
-* Tauri 2 system dependencies for your OS (see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites))
-
-### Setup & Run
-
-```bash
-npm install
-npm run tauri:dev      # full desktop app (Vite + Rust)
-npm run dev            # web-only, for fast UI iteration
-npm run test           # vitest suite
-npm run tauri:build    # production binary
+```
+  Scanner    ->   Match detail   ->   Bankroll
+     |                |                  |
+     +------> Strategy + Metrics <-------+
 ```
 
-### Releases
-Tagging `v*` (e.g. `v0.1.0`) triggers `.github/workflows/release.yml`, which builds installers for macOS (Apple Silicon + Intel), Linux, and Windows and drafts a GitHub release.
+- **Scanner** — Browse fixtures by day and league. Filter by status, sort, flag interesting matches.
+- **Match detail** — Drill into a single match. See market lines, engine output, and the full reasoning trace.
+- **Strategy** — Tune the engine. Toggle markets, weight legs, edit rules, pick a stake policy, set combo behavior.
+- **Bankroll** — Place bets, log adjustments, watch the equity curve build over time.
+- **Metrics** — Hit rate, ROI, Brier score, calibration bins. The reality check on the strategy.
+
+Everything is local. Data lives on your machine. No accounts, no cloud sync by default.
 
 ---
 
-## Disclaimers
+## Highlights
 
-This software is provided for analytical and educational purposes. Sports betting is regulated differently in every jurisdiction; users are responsible for compliance with local laws. The engine surfaces statistical edges — it does not guarantee profit and offers no investment advice. All data, credentials, and ledger state remain on the user's machine.
+- **Bonded engine** — A pipeline of markets, rules, EV checks, stake sizing, and synthetic alt-lines. Outputs are traceable end to end.
+- **Deterministic** — Same inputs, same picks. Useful for debugging and for trusting what you see.
+- **Calibration-first** — The Metrics screen treats probability honesty as the goal, not just hit rate.
+- **Keyboard-friendly** — Built like a terminal. Dense, fast, monospace where it matters.
+- **Theming** — Pit-floor terminal look by default, with accent themes.
+
+![Strategy page](docs/images/strategy-page.png)
+
+---
+
+## Tech stack
+
+| Layer    | Stack                                              |
+|----------|----------------------------------------------------|
+| Shell    | Tauri 2 (Rust)                                     |
+| UI       | React 18 + TypeScript + Vite                       |
+| Styling  | Tailwind CSS, Radix primitives, custom `zs` kit    |
+| State    | TanStack Query with persistent cache               |
+| Storage  | SQLite via `@tauri-apps/plugin-sql`                |
+| Charts   | Recharts                                           |
+| Tests    | Vitest, Testing Library, fast-check, MSW           |
+
+---
+
+## Getting started
+
+Prerequisites: Node 20+, npm, and the Rust toolchain (only needed for the desktop build).
+
+```bash
+# install
+npm install
+
+# run the web version (fastest dev loop)
+npm run dev
+
+# run the full Tauri desktop shell
+npm run tauri:dev
+
+# build the desktop app
+npm run tauri:build
+```
+
+The web version uses the same UI; the desktop version adds persistent SQLite storage and native windowing.
+
+---
+
+## Project layout
+
+```
+src/
+  pages/        screens (Scanner, MatchDetail, Bankroll, Metrics, ...)
+  features/     feature modules (one folder per page area)
+  engine/       picks pipeline — markets, rules, EV, stake, combos
+  domain/       core types (Match, Bet, Strategy, Trace, ...)
+  storage/      repos + persistence layer
+  components/   shared UI, including the `zs` design kit
+src-tauri/      Rust side of the desktop app
+```
+
+If you want to read the code, start at `src/engine/pipeline.ts` — that file is the spine.
+
+---
+
+## Screens
+
+### Scanner
+The entry point. Days across the top, leagues grouped, matches inside. Filters and sort live on the right.
+
+![Scanner](docs/images/scanner.png)
+
+### Match detail
+One match, expanded. Lines, picks, and the reasoning trace that produced them.
+
+![Match detail](docs/images/match-detail-trace.png)
+
+### Bankroll
+Equity curve, open exposure, ledger, bet history. Adjustments and manual entries via dialogs.
+
+![Bankroll — equity and exposure](docs/images/bankroll-equity.png)
+![Bankroll — ledger and bets](docs/images/bankroll-ledger.png)
+
+### Metrics
+Calibration bins, KPIs, the long-term truth about your edge.
+
+![Metrics](docs/images/metrics.png)
+
+### Strategy
+Five cards — Markets, Leg weights, Rules, Stake policy, Combo policy.
+
+![Strategy — stake policy and leg weights](docs/images/strategy-stake-weights.png)
+![Strategy — rules, markets and combo policy](docs/images/strategy-rules-markets-combo.png)
+
+### Settings
+App-wide options: theme, accent, storage, fixtures window, and more.
+
+![Settings](docs/images/settings.png)
+
+---
+
+## Status
+
+Z-Source is a personal tool that escaped its drawer. Things move; APIs change; the strategy engine is opinionated. Treat it as a working sketch you can edit, not a finished product.
+
+---
+
+## License
+
+See `LICENSE` if present, otherwise: all rights reserved by the author for now.
