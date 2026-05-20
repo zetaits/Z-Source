@@ -440,9 +440,10 @@ function LeagueBlock({ group }: { group: LeagueGroup }) {
         <Link
           key={m.catalogId}
           to={`/match/${m.catalogId}`}
+          className="zs-match-row"
           style={{
             display: "grid",
-            gridTemplateColumns: "70px 1fr 120px 90px 80px",
+            gridTemplateColumns: "70px 1fr 120px 90px auto",
             gap: 14,
             alignItems: "center",
             padding: "12px 16px",
@@ -491,7 +492,10 @@ function LeagueBlock({ group }: { group: LeagueGroup }) {
             </div>
           </div>
           <Tag>{m.source.toUpperCase()}</Tag>
-          <button className="zs-btn sm" style={{ marginLeft: "auto" }}>
+          <button
+            className="zs-btn sm"
+            style={{ marginLeft: "auto", whiteSpace: "nowrap" }}
+          >
             ANALYSE →
           </button>
         </Link>

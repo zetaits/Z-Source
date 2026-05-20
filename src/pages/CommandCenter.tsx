@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Block, ScreenHeader, Stat, Sparkline, EquityChart, FlagChip, Tag } from "@/components/zs";
 import { findLeagueById } from "@/config/leagues";
+import { getTeamPunchyName } from "@/domain/match";
 import type { CatalogMatch } from "@/domain/match";
 import { clvPct, profitMinor } from "@/domain/bet";
 import {
@@ -14,6 +15,7 @@ import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
 import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { isPersistentStorage } from "@/storage";
 import { formatMoney, formatSignedMoney } from "@/lib/money";
+import { cn } from "@/lib/utils";
 import { formatRelativeShort } from "@/lib/time";
 
 export function CommandCenter() {
@@ -28,15 +30,16 @@ export function CommandCenter() {
 
   const upcoming = useMemo<CatalogMatch[]>(() => {
     const now = Date.now();
-    return fixtures.data
-      .filter((m) => new Date(m.kickoffAt).getTime() >= now - 3 * 3_600_000)
+    const data = fixtures.data || [];
+    return data
+      .filter((m) => m?.kickoffAt && new Date(m.kickoffAt).getTime() >= now - 3 * 3_600_000)
       .filter((m) => m.status !== "FT" && m.status !== "CANCELLED")
       .slice(0, 12);
   }, [fixtures.data]);
 
   const nextMatch = useMemo(() => {
     const now = Date.now();
-    return upcoming.find((m) => new Date(m.kickoffAt).getTime() >= now) ?? null;
+    return upcoming?.find((m) => m?.kickoffAt && new Date(m.kickoffAt).getTime() >= now) ?? null;
   }, [upcoming]);
 
   const currency = settingsQ.data?.currency ?? "USD";
@@ -78,7 +81,7 @@ export function CommandCenter() {
   const dayLabel = today
     .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
     .toUpperCase();
-  const armedCount = upcoming.filter((m) => m.status !== "FT").length;
+  const armedCount = (upcoming || []).filter((m) => m.status !== "FT").length;
   const nextWhistleTxt = nextMatch ? formatRelativeShort(nextMatch.kickoffAt) : "—";
 
   const sub = `${armedCount} fixture${armedCount === 1 ? "" : "s"} in window · next whistle ${nextWhistleTxt}${
@@ -317,8 +320,8 @@ function NextWhistleHero({ match }: { match: CatalogMatch }) {
     .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
     .toUpperCase();
   const relative = formatRelativeShort(match.kickoffAt);
-  const homeShort = match.home.name.split(" ").slice(-1)[0].toUpperCase();
-  const awayShort = match.away.name.split(" ").slice(-1)[0].toUpperCase();
+  const homeShort = getTeamPunchyName(match.home.name).toUpperCase();
+  const awayShort = getTeamPunchyName(match.away.name).toUpperCase();
   const leagueName = league?.name ?? match.leagueName;
   const cc = league?.countryCode ?? match.countryCode ?? "—";
 

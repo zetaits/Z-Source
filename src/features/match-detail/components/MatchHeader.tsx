@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, HelpCircle, Zap } from "lucide-react";
 import type { CatalogMatch } from "@/domain/match";
+import { getTeamCrestLetter } from "@/domain/match";
 import type { AnalysisResult, ResolutionInfo } from "@/features/match-detail/hooks/useAnalysis";
 import { findLeagueById } from "@/config/leagues";
 import { Button } from "@/components/ui/button";
@@ -189,7 +190,7 @@ export function MatchHeader({
       <div className="flex items-center gap-7 px-7 pb-4">
         {/* Home */}
         <div className="flex flex-1 items-center gap-3">
-          <TeamCrest letter={match.home.name.charAt(0).toUpperCase()} tone="info" />
+          <TeamCrest letter={getTeamCrestLetter(match.home.name)} tone="info" />
           <div>
             <div className="font-display text-[26px] leading-none text-fg">
               {match.home.name}
@@ -211,13 +212,14 @@ export function MatchHeader({
               {match.away.name}
             </div>
             <div className="mt-1 font-mono text-[11px] text-fg-muted">
-              {awayFormStr ?? ""}
+              {awayFormStr ?? leagueName}
               {analysis?.awayForm &&
                 ` · xG ${(analysis.awayForm.goalsFor / Math.max(1, analysis.awayForm.games.length)).toFixed(1)}`}
             </div>
           </div>
-          <TeamCrest letter={match.away.name.charAt(0).toUpperCase()} tone="neg" />
+          <TeamCrest letter={getTeamCrestLetter(match.away.name)} tone="neg" />
         </div>
+
       </div>
 
       {/* Meta strip */}
