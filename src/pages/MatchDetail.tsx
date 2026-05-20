@@ -7,7 +7,6 @@ import type { MarketKey } from "@/domain/market";
 import type { LineSnapshot } from "@/domain/odds";
 import type { ComboPlay, PlayCandidate } from "@/domain/play";
 import type { AnalysisDiagnostics } from "@/engine";
-import type { SyntheticPrice } from "@/engine/synthetic";
 import type { BetEntryPrefill } from "@/features/bankroll/components/BetEntryDialog";
 import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
 import { useBankrollSettings } from "@/features/bankroll/hooks/useBankroll";
@@ -19,12 +18,10 @@ import type { CatalogMatch } from "@/domain/match";
 import { EngineScan } from "@/features/match-detail/components/EngineScan";
 import { PicksSkeleton } from "@/features/match-detail/components/PicksSkeleton";
 import { PicksTab } from "@/features/match-detail/components/PicksTab";
-import { OddsBoard } from "@/features/match-detail/components/OddsBoard";
 import { LinesTab } from "@/features/match-detail/components/LinesTab";
 import { MatchupTab } from "@/features/match-detail/components/MatchupTab";
 import { TrendsTab } from "@/features/match-detail/components/TrendsTab";
-import { SplitsTab } from "@/features/match-detail/components/SplitsTab";
-import { SentimentTab } from "@/features/match-detail/components/SentimentTab";
+import { MarketTab } from "@/features/match-detail/components/MarketTab";
 import { IntangiblesTab } from "@/features/match-detail/components/IntangiblesTab";
 import { ComboPlayCard } from "@/components/domain/ComboPlayCard";
 import { ReasoningTrace } from "@/components/domain/ReasoningTrace";
@@ -33,7 +30,7 @@ import { useAnalysis } from "@/features/match-detail/hooks/useAnalysis";
 import type { AnalysisResult } from "@/features/match-detail/hooks/useAnalysis";
 import { formatRelativeShort } from "@/lib/time";
 
-const TABS = ["picks", "lines", "matchup", "trends", "splits", "sentiment", "intangibles"] as const;
+const TABS = ["picks", "lines", "matchup", "trends", "market", "intangibles"] as const;
 type Tab = typeof TABS[number];
 
 const toPrefill = (play: PlayCandidate, leagueId: string): BetEntryPrefill => ({
@@ -173,10 +170,6 @@ export function MatchDetail() {
             combos={combos}
             allCandidates={analysis.data?.allCandidates ?? []}
             lines={analysis.data?.lines ?? {}}
-            openers={analysis.data?.openers ?? {}}
-            synthetic={analysis.data?.synthetic ?? {}}
-            homeName={match.home.name}
-            awayName={match.away.name}
             onLogBet={openLogBet}
             ran={Boolean(analysis.data)}
             isFetching={analysis.isFetching}
@@ -185,7 +178,18 @@ export function MatchDetail() {
             diagnostics={analysis.data?.diagnostics}
           />
         )}
-        {activeTab === "lines" && <LinesTab matchId={lineMatchId} />}
+        {activeTab === "lines" && (
+          <LinesTab
+            lines={analysis.data?.lines ?? {}}
+            openers={analysis.data?.openers ?? {}}
+            synthetic={analysis.data?.synthetic ?? {}}
+            candidates={analysis.data?.allCandidates ?? []}
+            picks={plays}
+            homeName={match.home.name}
+            awayName={match.away.name}
+            ran={Boolean(analysis.data)}
+          />
+        )}
         {activeTab === "matchup" && (
           <MatchupTab
             homeName={match.home.name}
@@ -204,19 +208,13 @@ export function MatchDetail() {
             h2h={analysis.data?.h2h}
           />
         )}
-        {activeTab === "splits" && (
-          <SplitsTab
+        {activeTab === "market" && (
+          <MarketTab
             splits={analysis.data?.splits ?? {}}
             lines={analysis.data?.lines ?? {}}
             homeName={match.home.name}
             awayName={match.away.name}
-          />
-        )}
-        {activeTab === "sentiment" && (
-          <SentimentTab
-            splits={analysis.data?.splits ?? {}}
-            homeName={match.home.name}
-            awayName={match.away.name}
+            matchId={lineMatchId}
           />
         )}
         {activeTab === "intangibles" && (
@@ -241,8 +239,18 @@ export function MatchDetail() {
 }
 
 function shortName(name: string): string {
-  const last = name.split(/\s+/).filter(Boolean).slice(-1)[0] ?? name;
-  return last.toUpperCase().slice(0, 6);
+  const tokens = name.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return name.toUpperCase().slice(0, 6);
+  // Drop tokens that look like club affixes (FC/CF/SC/AC/etc.) or year prefixes
+  // ("1.", "1860"), but only when other tokens survive.
+  const isAffix = (t: string): boolean =>
+    /^[A-ZÀ-Ý]{1,3}\.?$/.test(t) || /^\d+\.?$/.test(t);
+  const meaningful = tokens.filter((t) => !isAffix(t));
+  const pool = meaningful.length > 0 ? meaningful : tokens;
+  // Among meaningful tokens, prefer the longest (most distinctive identifier).
+  // Ties keep the earlier token, which reads as the canonical name.
+  const best = pool.reduce((a, b) => (b.length > a.length ? b : a), pool[0]);
+  return best.toUpperCase().slice(0, 6);
 }
 
 function MatchHeaderPit({
@@ -490,10 +498,6 @@ function PicksPaneOrEmpty({
   combos,
   allCandidates,
   lines,
-  openers,
-  synthetic,
-  homeName,
-  awayName,
   onLogBet,
   ran,
   isFetching,
@@ -505,10 +509,6 @@ function PicksPaneOrEmpty({
   combos: ComboPlay[];
   allCandidates: PlayCandidate[];
   lines: Partial<Record<MarketKey, LineSnapshot>>;
-  openers: Partial<Record<MarketKey, LineSnapshot>>;
-  synthetic: Partial<Record<MarketKey, SyntheticPrice[]>>;
-  homeName: string;
-  awayName: string;
   onLogBet: (play: PlayCandidate) => void;
   ran: boolean;
   isFetching: boolean;
@@ -576,18 +576,9 @@ function PicksPaneOrEmpty({
             <Link to="/strategy" style={{ color: "var(--zs-accent)" }}>
               Strategy
             </Link>{" "}
-            or scan the odds board below.
+            or open the <strong>Lines</strong> tab for the full odds board.
           </div>
         </Block>
-        <OddsBoard
-          lines={lines}
-          openers={openers}
-          synthetic={synthetic}
-          candidates={allCandidates}
-          picks={plays}
-          homeName={homeName}
-          awayName={awayName}
-        />
       </div>
     );
   }
@@ -662,19 +653,6 @@ function PicksPaneOrEmpty({
             </Block>
           )}
         </div>
-      </div>
-
-      <div style={{ borderTop: "1px dashed var(--zs-border)", paddingTop: 16 }}>
-        <OddsBoard
-          lines={lines}
-          openers={openers}
-          synthetic={synthetic}
-          candidates={allCandidates}
-          picks={plays}
-          homeName={homeName}
-          awayName={awayName}
-          defaultMarket="OU_GOALS"
-        />
       </div>
     </div>
   );

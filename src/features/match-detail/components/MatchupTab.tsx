@@ -477,6 +477,7 @@ function H2HBlock({
 }
 
 export function MatchupTab({ homeName, awayName, homeForm, awayForm, h2h }: Props) {
+  const hasXgModel = Boolean(homeForm && awayForm);
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-2">
@@ -484,13 +485,193 @@ export function MatchupTab({ homeName, awayName, homeForm, awayForm, h2h }: Prop
         <FormCard title={awayName} form={awayForm} />
       </div>
 
-      {h2h ? (
-        <H2HBlock homeName={homeName} awayName={awayName} h2h={h2h} />
-      ) : (
-        <div className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
-          H2H data unavailable.
-        </div>
-      )}
+      <div
+        className="grid gap-4"
+        style={{
+          gridTemplateColumns: hasXgModel ? "1.1fr 1fr" : "1fr",
+        }}
+      >
+        {h2h ? (
+          <H2HBlock homeName={homeName} awayName={awayName} h2h={h2h} />
+        ) : (
+          <div className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
+            H2H data unavailable.
+          </div>
+        )}
+
+        {hasXgModel && (
+          <XgModelPanel
+            homeName={homeName}
+            awayName={awayName}
+            homeForm={homeForm!}
+            awayForm={awayForm!}
+          />
+        )}
+      </div>
     </div>
   );
+}
+
+function XgModelPanel({
+  homeName,
+  awayName,
+  homeForm,
+  awayForm,
+}: {
+  homeName: string;
+  awayName: string;
+  homeForm: TeamForm;
+  awayForm: TeamForm;
+}) {
+  const lambdaHome = homeForm.xGForLast ?? mean(homeForm.games.map((g) => g.goalsFor));
+  const lambdaAway = awayForm.xGForLast ?? mean(awayForm.games.map((g) => g.goalsFor));
+  const xgaHome = homeForm.xGAgainstLast ?? mean(homeForm.games.map((g) => g.goalsAgainst));
+  const xgaAway = awayForm.xGAgainstLast ?? mean(awayForm.games.map((g) => g.goalsAgainst));
+  const projHome = (lambdaHome + xgaAway) / 2;
+  const projAway = (lambdaAway + xgaHome) / 2;
+  const margin = projHome - projAway;
+  const marginLabel =
+    Math.abs(margin) < 0.05
+      ? "EVEN"
+      : margin > 0
+        ? `${margin.toFixed(2)} ${lastWord(homeName)}`
+        : `${Math.abs(margin).toFixed(2)} ${lastWord(awayName)}`;
+  const marginTone =
+    Math.abs(margin) < 0.05
+      ? "var(--zs-fg-muted)"
+      : "var(--zs-pos)";
+
+  const homePpg = homeForm.ppgLast;
+  const awayPpg = awayForm.ppgLast;
+
+  return (
+    <div
+      className="overflow-hidden rounded-lg border border-zs"
+      style={{ background: "var(--zs-bg-elev)" }}
+    >
+      <div
+        className="flex items-baseline justify-between border-b border-zs px-4 py-3"
+        style={{ flexWrap: "wrap", gap: 8 }}
+      >
+        <h4 className="text-sm font-semibold">xG Model</h4>
+        <span className="kicker">DC · {homeForm.lastN} match window</span>
+      </div>
+      <div className="flex flex-col gap-4 p-4">
+        <div>
+          <div className="kicker" style={{ marginBottom: 8 }}>
+            EXPECTED GOALS
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 24px 1fr",
+              alignItems: "baseline",
+              gap: 14,
+            }}
+          >
+            <div style={{ textAlign: "right" }}>
+              <div
+                className="zs-bignum"
+                style={{ fontSize: 34, fontVariantNumeric: "tabular-nums" }}
+              >
+                {projHome.toFixed(2)}
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  color: "var(--zs-fg-dim)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {lastWord(homeName).toUpperCase()}
+              </div>
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: 22,
+                color: "var(--zs-fg-muted)",
+                textAlign: "center",
+              }}
+            >
+              :
+            </div>
+            <div>
+              <div
+                className="zs-bignum"
+                style={{ fontSize: 34, fontVariantNumeric: "tabular-nums" }}
+              >
+                {projAway.toFixed(2)}
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  color: "var(--zs-fg-dim)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {lastWord(awayName).toUpperCase()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <Leader k={`λ ${lastWord(homeName)}`} v={lambdaHome.toFixed(2)} />
+          <Leader k={`λ ${lastWord(awayName)}`} v={lambdaAway.toFixed(2)} />
+          <Leader k={`xGA ${lastWord(homeName)}`} v={xgaHome.toFixed(2)} />
+          <Leader k={`xGA ${lastWord(awayName)}`} v={xgaAway.toFixed(2)} />
+          <Leader k={`PPG L${homeForm.lastN}`} v={`${homePpg.toFixed(2)} : ${awayPpg.toFixed(2)}`} />
+          <Leader k="xG margin" v={marginLabel} valueColor={marginTone} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Leader({
+  k,
+  v,
+  valueColor,
+}: {
+  k: string;
+  v: string;
+  valueColor?: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        gap: 8,
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+      }}
+    >
+      <span style={{ color: "var(--zs-fg-muted)" }}>{k}</span>
+      <span
+        style={{
+          flex: 1,
+          borderBottom: "1px dotted var(--zs-border)",
+          position: "relative",
+          top: -3,
+        }}
+      />
+      <span
+        style={{
+          color: valueColor ?? "var(--zs-fg)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {v}
+      </span>
+    </div>
+  );
+}
+
+function mean(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
