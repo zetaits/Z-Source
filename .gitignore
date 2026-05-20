@@ -33,7 +33,6 @@ src-tauri/target/
 *.sqlite
 *.sqlite3
 src-tauri/sports_data.db
-supabase/.temp/
 
 # IDE / Editor
 .vscode/

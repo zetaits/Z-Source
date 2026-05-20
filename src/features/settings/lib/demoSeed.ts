@@ -176,14 +176,14 @@ export const seedDemoData = async (): Promise<{ bets: number }> => {
   for (const d of demos) {
     await betsRepo.insert(d.bet);
     await bankrollRepo.append({
-      kind: "STAKE",
+      kind: "BET_STAKE",
       amountMinor: -d.bet.stakeMinor,
       betId: d.bet.id,
       occurredAt: d.bet.placedAt,
       note: DEMO_NOTE,
     });
     await bankrollRepo.append({
-      kind: "RESULT",
+      kind: "BET_RESULT",
       amountMinor: d.payoutMinor,
       betId: d.bet.id,
       occurredAt: d.bet.settledAt,

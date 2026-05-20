@@ -25,11 +25,13 @@ const fdorgMatchSchema = z.object({
   awayTeam: fdorgTeamSchema,
 }).passthrough();
 
+type FdorgMatch = z.infer<typeof fdorgMatchSchema>;
+
 // Per-item safe parse: one bad match won't drop the whole response
 const fdorgMatchesResponseSchema = z.object({
   matches: z
     .array(z.unknown())
-    .transform((items) =>
+    .transform((items): FdorgMatch[] =>
       items.flatMap((item) => {
         const r = fdorgMatchSchema.safeParse(item);
         if (!r.success) {
@@ -83,11 +85,11 @@ const mapFdorgStatus = (status: string): CatalogMatch["status"] => {
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
-const fdorgFetch = async <T>(
+const fdorgFetch = async <S extends z.ZodTypeAny>(
   url: string,
   apiKey: string,
-  schema: z.ZodType<T>,
-): Promise<T | null> => {
+  schema: S,
+): Promise<z.infer<S> | null> => {
   try {
     const res = await httpRequest({
       url,

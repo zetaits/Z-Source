@@ -4,6 +4,7 @@ import type { MarketKey } from "@/domain/market";
 import type { BookOffer, LineSnapshot } from "@/domain/odds";
 import type { Splits } from "@/domain/splits";
 import {
+  DEFAULT_COMBO_POLICY,
   DEFAULT_LEG_CAPS,
   DEFAULT_LEG_WEIGHTS,
   DEFAULT_STAKE_POLICY,
@@ -60,6 +61,7 @@ const defaultStrategy = (): StrategyConfig => ({
   stakePolicy: DEFAULT_STAKE_POLICY,
   rules: [],
   enabledMarkets: ENABLED_MARKETS,
+  comboPolicy: DEFAULT_COMBO_POLICY,
 });
 
 type ScenarioKey = "soft-edge-draw" | "reverse-line-movement" | "no-edge";
