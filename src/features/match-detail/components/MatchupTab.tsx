@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { TeamForm, TeamFormGame, H2H, FormResult } from "@/domain/history";
+import { getTeamPunchyName } from "@/domain/match";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -37,8 +38,6 @@ const shortYearDate = (iso: string): string => {
     .toLocaleDateString(undefined, { month: "short", year: "2-digit" })
     .replace(",", "");
 };
-
-const lastWord = (name: string): string => name.split(" ").slice(-1)[0];
 
 function FormStrip({ games }: { games: TeamForm["games"] }) {
   return (
@@ -190,10 +189,10 @@ const buildOutcome = (
   if (perspective === "neutral") {
     if (homeWonThatDay) {
       tone = "info";
-      label = `${lastWord(homeThatDayName)} won`;
+      label = `${getTeamPunchyName(homeThatDayName)} won`;
     } else if (awayWonThatDay) {
       tone = "warn";
-      label = `${lastWord(awayThatDayName)} won`;
+      label = `${getTeamPunchyName(awayThatDayName)} won`;
     } else {
       tone = "muted";
       label = "Draw";
@@ -523,10 +522,30 @@ function XgModelPanel({
   homeForm: TeamForm;
   awayForm: TeamForm;
 }) {
-  const lambdaHome = homeForm.xGForLast ?? mean(homeForm.games.map((g) => g.goalsFor));
-  const lambdaAway = awayForm.xGForLast ?? mean(awayForm.games.map((g) => g.goalsFor));
-  const xgaHome = homeForm.xGAgainstLast ?? mean(homeForm.games.map((g) => g.goalsAgainst));
-  const xgaAway = awayForm.xGAgainstLast ?? mean(awayForm.games.map((g) => g.goalsAgainst));
+  // xGForLast / xGAgainstLast are sums across lastN games — convert to per-match rates.
+  const perMatch = (sum: number | undefined, n: number, fallback: number[]): number =>
+    sum !== undefined && n > 0 ? sum / n : mean(fallback);
+
+  const lambdaHome = perMatch(
+    homeForm.xGForLast,
+    homeForm.lastN,
+    homeForm.games.map((g) => g.goalsFor),
+  );
+  const lambdaAway = perMatch(
+    awayForm.xGForLast,
+    awayForm.lastN,
+    awayForm.games.map((g) => g.goalsFor),
+  );
+  const xgaHome = perMatch(
+    homeForm.xGAgainstLast,
+    homeForm.lastN,
+    homeForm.games.map((g) => g.goalsAgainst),
+  );
+  const xgaAway = perMatch(
+    awayForm.xGAgainstLast,
+    awayForm.lastN,
+    awayForm.games.map((g) => g.goalsAgainst),
+  );
   const projHome = (lambdaHome + xgaAway) / 2;
   const projAway = (lambdaAway + xgaHome) / 2;
   const margin = projHome - projAway;
@@ -534,8 +553,8 @@ function XgModelPanel({
     Math.abs(margin) < 0.05
       ? "EVEN"
       : margin > 0
-        ? `${margin.toFixed(2)} ${lastWord(homeName)}`
-        : `${Math.abs(margin).toFixed(2)} ${lastWord(awayName)}`;
+        ? `${margin.toFixed(2)} ${getTeamPunchyName(homeName)}`
+        : `${Math.abs(margin).toFixed(2)} ${getTeamPunchyName(awayName)}`;
   const marginTone =
     Math.abs(margin) < 0.05
       ? "var(--zs-fg-muted)"
@@ -554,7 +573,7 @@ function XgModelPanel({
         style={{ flexWrap: "wrap", gap: 8 }}
       >
         <h4 className="text-sm font-semibold">xG Model</h4>
-        <span className="kicker">DC · {homeForm.lastN} match window</span>
+        <span className="kicker">λ · {homeForm.lastN} match window</span>
       </div>
       <div className="flex flex-col gap-4 p-4">
         <div>
@@ -584,7 +603,7 @@ function XgModelPanel({
                   letterSpacing: "0.08em",
                 }}
               >
-                {lastWord(homeName).toUpperCase()}
+                {getTeamPunchyName(homeName).toUpperCase()}
               </div>
             </div>
             <div
@@ -612,17 +631,17 @@ function XgModelPanel({
                   letterSpacing: "0.08em",
                 }}
               >
-                {lastWord(awayName).toUpperCase()}
+                {getTeamPunchyName(awayName).toUpperCase()}
               </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <Leader k={`λ ${lastWord(homeName)}`} v={lambdaHome.toFixed(2)} />
-          <Leader k={`λ ${lastWord(awayName)}`} v={lambdaAway.toFixed(2)} />
-          <Leader k={`xGA ${lastWord(homeName)}`} v={xgaHome.toFixed(2)} />
-          <Leader k={`xGA ${lastWord(awayName)}`} v={xgaAway.toFixed(2)} />
+          <Leader k={`λ ${getTeamPunchyName(homeName)}`} v={lambdaHome.toFixed(2)} />
+          <Leader k={`λ ${getTeamPunchyName(awayName)}`} v={lambdaAway.toFixed(2)} />
+          <Leader k={`xGA ${getTeamPunchyName(homeName)}`} v={xgaHome.toFixed(2)} />
+          <Leader k={`xGA ${getTeamPunchyName(awayName)}`} v={xgaAway.toFixed(2)} />
           <Leader k={`PPG L${homeForm.lastN}`} v={`${homePpg.toFixed(2)} : ${awayPpg.toFixed(2)}`} />
           <Leader k="xG margin" v={marginLabel} valueColor={marginTone} />
         </div>

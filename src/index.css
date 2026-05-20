@@ -349,6 +349,25 @@ body.density-loose   { --row-h: 36px; --pad: 22px; --pad-tight: 14px; font-size:
   }
   .zs-table tr:hover td { background: var(--zs-surface); color: var(--zs-fg); }
   .zs-table tr:last-child td { border-bottom: none; }
+
+  /* MATCH ROW (clickable list row in Scanner LeagueBlock) */
+  .zs-match-row {
+    position: relative;
+    transition: background 80ms linear;
+  }
+  .zs-match-row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--zs-accent);
+    opacity: 0;
+    transition: opacity 80ms linear;
+  }
+  .zs-match-row:hover { background: var(--zs-surface); }
+  .zs-match-row:hover::before { opacity: 1; }
   .zs-table .num     { text-align: right; color: var(--zs-fg); }
   .zs-table .row-key { color: var(--zs-fg); }
   .zs-table .muted   { color: var(--zs-fg-muted); }

@@ -159,39 +159,35 @@ export function DangerZoneCard() {
             </button>
           </div>
 
-          {import.meta.env.DEV && (
-            <>
-              <div style={rowStyle}>
-                <div>
-                  <div style={titleStyle}>SEED DEMO DATA · DEV</div>
-                  <div style={subStyle}>30 fake settled bets, ledger reset to 10u, mirrored pick_outcomes.</div>
-                </div>
-                <button
-                  type="button"
-                  className="zs-btn danger sm"
-                  disabled={!enabled || busy !== null}
-                  onClick={() => void onSeed()}
-                >
-                  {busy === "seed" ? "SEEDING…" : "SEED"}
-                </button>
-              </div>
+          <div style={rowStyle}>
+            <div>
+              <div style={titleStyle}>SEED DEMO DATA · DEV</div>
+              <div style={subStyle}>30 fake settled bets, ledger reset to 10u, mirrored pick_outcomes.</div>
+            </div>
+            <button
+              type="button"
+              className="zs-btn danger sm"
+              disabled={!enabled || busy !== null}
+              onClick={() => void onSeed()}
+            >
+              {busy === "seed" ? "SEEDING…" : "SEED"}
+            </button>
+          </div>
 
-              <div style={rowStyle}>
-                <div>
-                  <div style={titleStyle}>CLEAR DEMO DATA · DEV</div>
-                  <div style={subStyle}>Removes all rows with the demo- prefix.</div>
-                </div>
-                <button
-                  type="button"
-                  className="zs-btn danger sm"
-                  disabled={!enabled || busy !== null}
-                  onClick={() => void onClearDemo()}
-                >
-                  {busy === "clear" ? "CLEARING…" : "CLEAR"}
-                </button>
-              </div>
-            </>
-          )}
+          <div style={rowStyle}>
+            <div>
+              <div style={titleStyle}>CLEAR DEMO DATA · DEV</div>
+              <div style={subStyle}>Removes all rows with the demo- prefix.</div>
+            </div>
+            <button
+              type="button"
+              className="zs-btn danger sm"
+              disabled={!enabled || busy !== null}
+              onClick={() => void onClearDemo()}
+            >
+              {busy === "clear" ? "CLEARING…" : "CLEAR"}
+            </button>
+          </div>
         </div>
 
         <AlertDialogContent>
