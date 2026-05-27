@@ -48,7 +48,11 @@ export const httpRequest = async <T = unknown>(
   if (req.rotateUA && !headers["User-Agent"]) {
     headers["User-Agent"] = nextUserAgent();
   }
-  const doFetch = pickFetch(req.preferBrowserFetch === true);
+  const useBrowser = req.preferBrowserFetch === true;
+  const doFetch = pickFetch(useBrowser);
+  if (!useBrowser && tauriEnv) {
+    headers["Origin"] = "";
+  }
   const response = await doFetch(req.url, {
     method: req.method ?? "GET",
     headers,

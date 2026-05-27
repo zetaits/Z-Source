@@ -79,7 +79,10 @@ export const localDayKey = (d: Date): string => d.toLocaleDateString("sv-SE");
 
 export const fetchFdorgWindowFixtures = async (): Promise<CatalogMatch[]> => {
   const settings = await settingsStore.load();
-  if (!settings.footballDataApiKey) return [];
+  if (!settings.footballDataApiKey) {
+    console.info("[fixtures] fdorg: skipped (no key)");
+    return [];
+  }
   const allLeagueIds = settings.enabledLeagueIds.map((id) => LeagueId(id));
   if (allLeagueIds.length === 0) return [];
 
@@ -88,7 +91,10 @@ export const fetchFdorgWindowFixtures = async (): Promise<CatalogMatch[]> => {
     true,
     Boolean(settings.oddsApiIoKey),
   );
-  if (fdorgLeagueIds.length === 0) return [];
+  if (fdorgLeagueIds.length === 0) {
+    console.info("[fixtures] fdorg: 0 leagues assigned");
+    return [];
+  }
 
   const { from, to } = buildWindowRange();
 
@@ -99,14 +105,15 @@ export const fetchFdorgWindowFixtures = async (): Promise<CatalogMatch[]> => {
       to,
       maxAgeMs: WINDOW_FIXTURES_TTL_MS,
     });
-    if (cached !== null) return cached;
+    if (cached !== null) {
+      console.info(`[fixtures] fdorg: ${cached.length} matches (cache hit)`);
+      return cached;
+    }
   }
 
   const provider = createFootballDataCatalogProvider(settings.footballDataApiKey);
-  const fresh = await provider.listFixtures({ leagueIds: fdorgLeagueIds, from, to }).catch((err) => {
-    console.error("[fdorg window] listFixtures threw:", err);
-    return [] as CatalogMatch[];
-  });
+  const fresh = await provider.listFixtures({ leagueIds: fdorgLeagueIds, from, to });
+  console.info(`[fixtures] fdorg: ${fresh.length} matches (fresh)`);
   if (isPersistentStorage() && fresh.length > 0) {
     void matchesCacheRepo.upsert(fresh).catch(() => {});
   }
@@ -115,7 +122,10 @@ export const fetchFdorgWindowFixtures = async (): Promise<CatalogMatch[]> => {
 
 export const fetchOddsApiIoWindowFixtures = async (): Promise<CatalogMatch[]> => {
   const settings = await settingsStore.load();
-  if (!settings.oddsApiIoKey) return [];
+  if (!settings.oddsApiIoKey) {
+    console.info("[fixtures] odds-api.io: skipped (no key)");
+    return [];
+  }
   const allLeagueIds = settings.enabledLeagueIds.map((id) => LeagueId(id));
   if (allLeagueIds.length === 0) return [];
 
@@ -124,7 +134,10 @@ export const fetchOddsApiIoWindowFixtures = async (): Promise<CatalogMatch[]> =>
     Boolean(settings.footballDataApiKey),
     true,
   );
-  if (oddsIo.length === 0) return [];
+  if (oddsIo.length === 0) {
+    console.info("[fixtures] odds-api.io: 0 leagues assigned");
+    return [];
+  }
 
   const { from, to } = buildWindowRange();
 
@@ -135,19 +148,18 @@ export const fetchOddsApiIoWindowFixtures = async (): Promise<CatalogMatch[]> =>
       to,
       maxAgeMs: WINDOW_FIXTURES_TTL_MS,
     });
-    if (cached !== null) return cached;
+    if (cached !== null) {
+      console.info(`[fixtures] odds-api.io: ${cached.length} matches (cache hit)`);
+      return cached;
+    }
   }
 
   const provider = createOddsApiIoCatalogProvider(() => ({
     apiKey: settings.oddsApiIoKey ?? "",
     sportSlug: "football",
   }));
-  const fresh = await provider
-    .listFixtures({ leagueIds: oddsIo, from, to })
-    .catch((err) => {
-      console.error("[odds-api.io window] listFixtures threw:", err);
-      return [] as CatalogMatch[];
-    });
+  const fresh = await provider.listFixtures({ leagueIds: oddsIo, from, to });
+  console.info(`[fixtures] odds-api.io: ${fresh.length} matches (fresh)`);
   if (isPersistentStorage() && fresh.length > 0) {
     void matchesCacheRepo.upsert(fresh).catch(() => {});
   }
@@ -164,7 +176,10 @@ export const fetchSofaRemainingWindowFixtures = async (): Promise<CatalogMatch[]
     Boolean(settings.footballDataApiKey),
     Boolean(settings.oddsApiIoKey),
   );
-  if (sofaLeagueIds.length === 0) return [];
+  if (sofaLeagueIds.length === 0) {
+    console.info("[fixtures] sofascore: 0 leagues assigned");
+    return [];
+  }
 
   const { from, to } = buildWindowRange();
 
@@ -175,7 +190,10 @@ export const fetchSofaRemainingWindowFixtures = async (): Promise<CatalogMatch[]
       to,
       maxAgeMs: WINDOW_FIXTURES_TTL_MS,
     });
-    if (cached !== null) return cached;
+    if (cached !== null) {
+      console.info(`[fixtures] sofascore: ${cached.length} matches (cache hit)`);
+      return cached;
+    }
   }
 
   const fresh = await sofaScoreCatalogProvider.listFixtures({
@@ -183,6 +201,7 @@ export const fetchSofaRemainingWindowFixtures = async (): Promise<CatalogMatch[]
     from,
     to,
   });
+  console.info(`[fixtures] sofascore: ${fresh.length} matches (fresh)`);
   if (isPersistentStorage() && fresh.length > 0) {
     void matchesCacheRepo.upsert(fresh).catch(() => {});
   }

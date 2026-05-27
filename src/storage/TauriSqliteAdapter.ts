@@ -15,9 +15,17 @@ export class TauriSqliteAdapter implements StorageAdapter {
   private getDb(): Promise<Database> {
     if (this.db) return Promise.resolve(this.db);
     if (!this.loading) {
-      this.loading = Database.load(DB_URL).then((d) => {
-        this.db = d;
-        return d;
+      this.loading = Promise.race([
+        Database.load(DB_URL).then((d) => {
+          this.db = d;
+          return d;
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Database load timed out after 10 s")), 10_000),
+        ),
+      ]).catch((err) => {
+        this.loading = null;
+        throw err;
       });
     }
     return this.loading;

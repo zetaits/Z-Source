@@ -83,7 +83,7 @@ const fetchActionNetwork = async (
   const res = await httpRequest({
     url,
     rps: 1,
-    preferBrowserFetch: true,
+    rotateUA: true,
     headers: { Accept: "application/json" },
     signal,
   });

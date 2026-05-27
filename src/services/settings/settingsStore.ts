@@ -2,6 +2,7 @@ import { z } from "zod";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { isTauri } from "@/services/http/environment";
 import { LEAGUES } from "@/config/leagues";
+import { queryClient } from "@/services/cache/queryClient";
 
 const STORE_FILE = "z-source.settings.json";
 
@@ -35,7 +36,7 @@ const defaults = (): AppSettings => ({
   oddsRegion: "eu",
   splitProviderId: "action-network",
   historyProviderId: "sofascore",
-  userBooks: [],
+  userBooks: ["Bet365", "Sbobet"],
 });
 
 const migrate = (raw: unknown): AppSettings => {
@@ -121,8 +122,15 @@ export const settingsStore = {
     const next: AppSettings = { ...current, ...patch };
     const validated = settingsSchema.parse(next);
     await backendOf().set(validated);
+    const keysChanged =
+      patch.oddsApiIoKey !== undefined ||
+      patch.footballDataApiKey !== undefined ||
+      patch.enabledLeagueIds !== undefined;
     cache = validated;
     subscribers.forEach((cb) => cb(validated));
+    if (keysChanged) {
+      void queryClient.invalidateQueries({ queryKey: ["commandCenter", "fixtures"] });
+    }
     return validated;
   },
   subscribe(listener: (s: AppSettings) => void): () => void {

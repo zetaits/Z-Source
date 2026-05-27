@@ -22,7 +22,7 @@ const fetchActiveSeason = async (tournamentId: number): Promise<number | null> =
     const res = await httpRequest({
       url: tournamentSeasonsUrl(tournamentId),
       rps: 1,
-      preferBrowserFetch: true,
+      rotateUA: true,
       headers: { Accept: "application/json" },
     });
     const json = await res.json();
@@ -50,7 +50,7 @@ const fetchEventsPage = async (
     const res = await httpRequest({
       url: tournamentEventsUrl(tournamentId, seasonId, span, page),
       rps: 1,
-      preferBrowserFetch: true,
+      rotateUA: true,
       headers: { Accept: "application/json" },
       acceptStatus: [404],
     });

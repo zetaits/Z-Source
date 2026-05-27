@@ -238,19 +238,39 @@ export function MatchDetail() {
   );
 }
 
+const SHORT_ALIASES: Record<string, string> = {
+  "paris saint-germain": "PSG",
+  "borussia dortmund": "BVB",
+  "borussia mönchengladbach": "GLADBACH",
+  "wolverhampton wanderers": "WOLVES",
+  "manchester united": "MAN UTD",
+  "manchester city": "MAN CITY",
+  "tottenham hotspur": "SPURS",
+  "west ham united": "WEST HAM",
+  "newcastle united": "NEWCASTLE",
+  "nottingham forest": "NOTT'M",
+  "sheffield united": "SHEFFIELD",
+  "brighton and hove albion": "BRIGHTON",
+  "rb leipzig": "LEIPZIG",
+  "bayern munich": "BAYERN",
+  "bayer leverkusen": "LEVRKSEN",
+  "atletico madrid": "ATLETICO",
+  "real sociedad": "SOCIEDAD",
+  "real betis": "BETIS",
+  "celta vigo": "CELTA",
+};
+
 function shortName(name: string): string {
-  const tokens = name.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return name.toUpperCase().slice(0, 6);
-  // Drop tokens that look like club affixes (FC/CF/SC/AC/etc.) or year prefixes
-  // ("1.", "1860"), but only when other tokens survive.
+  const alias = SHORT_ALIASES[name.toLowerCase()];
+  if (alias) return alias;
+  const tokens = name.split(/[\s-]+/).filter(Boolean);
+  if (tokens.length === 0) return name.toUpperCase().slice(0, 7);
   const isAffix = (t: string): boolean =>
-    /^[A-ZÀ-Ý]{1,3}\.?$/.test(t) || /^\d+\.?$/.test(t);
+    /^[A-ZÀ-Ý]{1,3}\.?$/i.test(t) || /^\d+\.?$/.test(t);
   const meaningful = tokens.filter((t) => !isAffix(t));
   const pool = meaningful.length > 0 ? meaningful : tokens;
-  // Among meaningful tokens, prefer the longest (most distinctive identifier).
-  // Ties keep the earlier token, which reads as the canonical name.
   const best = pool.reduce((a, b) => (b.length > a.length ? b : a), pool[0]);
-  return best.toUpperCase().slice(0, 6);
+  return best.toUpperCase().slice(0, 8);
 }
 
 function MatchHeaderPit({
@@ -310,7 +330,7 @@ function MatchHeaderPit({
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "stretch" }}>
           <div style={{ padding: "22px 26px", textAlign: "right", borderRight: "1px solid var(--zs-border)" }}>
             <div className="zs-caption" style={{ marginBottom: 8 }}>HOME</div>
-            <div className="zs-bignum lg" style={{ marginBottom: 4 }}>
+            <div className="zs-bignum lg" style={{ marginBottom: 4, whiteSpace: "nowrap" }}>
               {shortName(match.home.name)}
             </div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--zs-fg-dim)", marginBottom: 12 }}>
@@ -357,7 +377,7 @@ function MatchHeaderPit({
           </div>
           <div style={{ padding: "22px 26px", borderLeft: "1px solid var(--zs-border)" }}>
             <div className="zs-caption" style={{ marginBottom: 8 }}>AWAY</div>
-            <div className="zs-bignum lg" style={{ marginBottom: 4 }}>
+            <div className="zs-bignum lg" style={{ marginBottom: 4, whiteSpace: "nowrap" }}>
               {shortName(match.away.name)}
             </div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--zs-fg-dim)", marginBottom: 12 }}>

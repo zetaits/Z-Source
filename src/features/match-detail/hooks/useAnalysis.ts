@@ -292,6 +292,13 @@ const resolveWithProvider = async (
   const resolver = createMatchResolver({
     listEvents: async () => {
       const evs = await provider.listEvents(sportKey);
+      console.info(
+        `[resolver] ${providerId} returned ${evs.length} events. Catalog: "${match.home.name}" vs "${match.away.name}"`,
+      );
+      if (evs.length > 0) {
+        const sample = evs.slice(0, 5).map((e) => `"${e.homeName}" vs "${e.awayName}"`);
+        console.info(`[resolver] sample events: ${sample.join(" | ")}`);
+      }
       return evs.map((e) => ({
         eventId: e.eventId,
         homeName: e.homeName,
@@ -301,6 +308,14 @@ const resolveWithProvider = async (
     },
   });
   const result = await resolver.resolve(match);
+  const pct = Math.round(result.confidence * 100);
+  if (result.matched) {
+    console.info(
+      `[resolver] matched "${result.matched.homeName}" vs "${result.matched.awayName}" (${pct}%)`,
+    );
+  } else {
+    console.warn(`[resolver] NO match for "${match.home.name}" vs "${match.away.name}" (best ${pct}%)`);
+  }
   const oddsEventId = result.matchId ? String(result.matchId) : null;
   const resolvedAt = new Date().toISOString();
   if (isPersistentStorage()) {

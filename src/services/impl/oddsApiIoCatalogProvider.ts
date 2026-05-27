@@ -52,6 +52,8 @@ export interface OddsApiIoCatalogConfig {
 const fetchAllEvents = async (config: OddsApiIoCatalogConfig): Promise<IoEvent[]> => {
   const sport = config.sportSlug ?? "football";
   const url = `${IO_BASE}/events?sport=${encodeURIComponent(sport)}&apiKey=${encodeURIComponent(config.apiKey)}`;
+  const masked = config.apiKey ? `${config.apiKey.slice(0, 8)}…(${config.apiKey.length} chars)` : "(empty)";
+  console.info(`[odds-api.io] fetching events · key=${masked} · sport=${sport}`);
 
   try {
     const res = await httpRequest({
@@ -70,10 +72,11 @@ const fetchAllEvents = async (config: OddsApiIoCatalogConfig): Promise<IoEvent[]
     return parsed.data;
   } catch (err) {
     if (err instanceof HttpError) {
+      const detail = err.body ? ` — ${err.body.slice(0, 200)}` : "";
       if (err.status === 401 || err.status === 403)
-        throw new Error("odds-api.io rejected the API key (401/403)");
+        throw new Error(`odds-api.io ${err.status}${detail}`);
       if (err.status === 429)
-        throw new Error("odds-api.io rate limit reached (429)");
+        throw new Error(`odds-api.io rate limit reached (429)${detail}`);
     }
     throw err;
   }
