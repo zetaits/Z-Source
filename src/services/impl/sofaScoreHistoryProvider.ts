@@ -109,10 +109,13 @@ const buildQueryCandidates = (name: string, normalized: string): string[] => {
   return Array.from(out);
 };
 
-const searchSofaTeamHits = async (q: string): Promise<SofaTeamHit[]> => {
+// Returns null on a transient fetch failure (403/network), [] on a successful
+// search with no team results. Callers must not cache a null return as a
+// definitive "no such team".
+const searchSofaTeamHits = async (q: string): Promise<SofaTeamHit[] | null> => {
   const url = `${SOFA_API_BASE}/search/all?q=${encodeURIComponent(q)}`;
   const raw = await fetchJson<unknown>(url);
-  if (!raw) return [];
+  if (!raw) return null;
   const parsed = sofaSearchSchema.safeParse(raw);
   if (!parsed.success || !parsed.data.results) return [];
   return parsed.data.results
@@ -165,10 +168,15 @@ const resolveTeamIdByName = async (name: string): Promise<number | null> => {
 
     let bestScore = 0;
     let bestHit: SofaTeamHit | null = null;
+    let searchFailed = false;
     const topCandidates: Array<{ name: string; score: number }> = [];
 
     for (const q of queries) {
       const hits = await searchSofaTeamHits(q);
+      if (hits === null) {
+        searchFailed = true;
+        continue;
+      }
       if (hits.length === 0) continue;
       const ranked = rankHits(name, hits);
       for (const r of ranked.slice(0, 5)) {
@@ -189,9 +197,12 @@ const resolveTeamIdByName = async (name: string): Promise<number | null> => {
         .map((c) => `"${c.name}" ${c.score.toFixed(2)}`)
         .join(", ");
       console.warn(
-        `[sofascore resolve] no match for "${name}" (normalized "${normalized}"). Top: [${top3 || "none"}]. Threshold ${RESOLVE_THRESHOLD}.`,
+        `[sofascore resolve] no match for "${name}" (normalized "${normalized}"). Top: [${top3 || "none"}]. Threshold ${RESOLVE_THRESHOLD}.${searchFailed ? " (search failed; not caching)" : ""}`,
       );
-      teamNameToSofaId.set(normalized, null);
+      // Only memoize a definitive negative. A transient search failure (e.g. the
+      // proxy not yet cleared) must stay retryable, otherwise one boot-time 403
+      // poisons the name for the rest of the session.
+      if (!searchFailed) teamNameToSofaId.set(normalized, null);
       return null;
     }
 
@@ -458,9 +469,11 @@ export const createSofaScoreHistoryProvider = (fdorgApiKey?: string): HistoryPro
     }
 
     const cacheKey = formCacheKey(sofaId, lastN);
-    const cached = await historyCacheRepo.get<TeamForm>(cacheKey).catch(() => null);
-    if (cached && isFreshWithin(cached.fetchedAt, FORM_TTL_MS)) {
-      return { ...cached.payload, teamId };
+    if (!query?.forceRefresh) {
+      const cached = await historyCacheRepo.get<TeamForm>(cacheKey).catch(() => null);
+      if (cached && isFreshWithin(cached.fetchedAt, FORM_TTL_MS)) {
+        return { ...cached.payload, teamId };
+      }
     }
 
     const events = await fetchTeamEvents(teamEventsLastUrl(sofaId, 0), query?.signal);
@@ -525,9 +538,11 @@ export const createSofaScoreHistoryProvider = (fdorgApiKey?: string): HistoryPro
     }
 
     const cacheKey = h2hCacheKey(homeSofaId, awaySofaId);
-    const cached = await historyCacheRepo.get<H2H>(cacheKey).catch(() => null);
-    if (cached && isFreshWithin(cached.fetchedAt, H2H_TTL_MS)) {
-      return { ...cached.payload, homeId, awayId };
+    if (!query?.forceRefresh) {
+      const cached = await historyCacheRepo.get<H2H>(cacheKey).catch(() => null);
+      if (cached && isFreshWithin(cached.fetchedAt, H2H_TTL_MS)) {
+        return { ...cached.payload, homeId, awayId };
+      }
     }
 
     const encounters = await fetchMeetingsViaTeamEvents(homeSofaId, awaySofaId, query?.signal);

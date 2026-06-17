@@ -3,6 +3,7 @@ import { BetId, BookId, LeagueId, MatchId } from "@/domain/ids";
 import type { MarketKey, Selection } from "@/domain/market";
 import type { PlayCandidate } from "@/domain/play";
 import { getStorage } from "@/storage";
+import { safeJsonParse } from "@/lib/json";
 
 interface BetRow {
   id: string;
@@ -29,7 +30,7 @@ const rowToBet = (r: BetRow): Bet => ({
   matchId: MatchId(r.match_id),
   leagueId: LeagueId(r.league_id),
   marketKey: r.market_key,
-  selection: JSON.parse(r.selection_json) as Selection,
+  selection: safeJsonParse<Selection>(r.selection_json, `bets.selection_json (id=${r.id})`),
   priceDecimal: r.price_decimal,
   book: BookId(r.book),
   stakeUnits: r.stake_units,
@@ -40,7 +41,7 @@ const rowToBet = (r: BetRow): Bet => ({
   closingPriceDecimal: r.closing_price_decimal ?? undefined,
   notes: r.notes ?? undefined,
   playSnapshot: r.play_snapshot_json
-    ? (JSON.parse(r.play_snapshot_json) as PlayCandidate)
+    ? safeJsonParse<PlayCandidate>(r.play_snapshot_json, `bets.play_snapshot_json (id=${r.id})`)
     : undefined,
 });
 

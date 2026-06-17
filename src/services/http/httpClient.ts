@@ -44,6 +44,27 @@ export const httpRequest = async <T = unknown>(
 ): Promise<HttpResponse<T>> => {
   const host = hostOf(req.url);
   await limiterFor(host, req.rps ?? 1).acquire();
+
+  // SofaScore is behind DataDome and only serves requests from a cleared
+  // sofascore.com context. Under Tauri, route through the hidden proxy webview
+  // (lazy import keeps the Tauri event API out of browser/test builds).
+  if (tauriEnv && /(^|\.)sofascore\.com$/.test(host)) {
+    const accepted = req.acceptStatus ?? [];
+    const { proxyFetch } = await import("./sofaScoreProxy");
+    const { status, body } = await proxyFetch(req.url, req.signal);
+    if (status !== 200 && !accepted.includes(status)) {
+      throw new HttpError(status, req.url, body);
+    }
+    return {
+      status,
+      headers: new Headers(),
+      ok: status >= 200 && status < 300,
+      url: req.url,
+      text: async () => body,
+      json: async () => JSON.parse(body) as T,
+    };
+  }
+
   const headers: Record<string, string> = { ...(req.headers ?? {}) };
   if (req.rotateUA && !headers["User-Agent"]) {
     headers["User-Agent"] = nextUserAgent();
@@ -74,13 +95,42 @@ export const httpRequest = async <T = unknown>(
   };
 };
 
+const SENSITIVE_QUERY_KEYS = new Set([
+  "apikey",
+  "api_key",
+  "key",
+  "token",
+  "access_token",
+  "secret",
+]);
+
+/**
+ * Mask credential-bearing query params so URLs are safe to put in error
+ * messages and logs. Several providers (e.g. odds-api.io) pass the API key as a
+ * query param; without this it would leak into HttpError.message, console
+ * warnings and any toast surfacing the error.
+ */
+export const redactUrl = (raw: string): string => {
+  try {
+    const u = new URL(raw);
+    for (const k of u.searchParams.keys()) {
+      if (SENSITIVE_QUERY_KEYS.has(k.toLowerCase())) u.searchParams.set(k, "***");
+    }
+    return u.toString();
+  } catch {
+    return raw;
+  }
+};
+
 export class HttpError extends Error {
+  public readonly url: string;
   constructor(
     public readonly status: number,
-    public readonly url: string,
+    url: string,
     public readonly body: string,
   ) {
-    super(`HTTP ${status} ${url}`);
+    super(`HTTP ${status} ${redactUrl(url)}`);
     this.name = "HttpError";
+    this.url = redactUrl(url);
   }
 }

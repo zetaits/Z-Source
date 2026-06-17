@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { z } from "zod";
 import type { Bet } from "@/domain/bet";
 import { BetId, BookId, LeagueId, MatchId } from "@/domain/ids";
@@ -173,7 +174,7 @@ export function BetEntryDialog({ open, onOpenChange, prefill, bankroll, editing 
       }
       onOpenChange(false);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 

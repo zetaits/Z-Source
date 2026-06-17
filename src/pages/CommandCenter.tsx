@@ -16,6 +16,7 @@ import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { isPersistentStorage } from "@/storage";
 import { formatMoney, formatSignedMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/errors";
 import { formatRelativeShort } from "@/lib/time";
 
 export function CommandCenter() {
@@ -164,7 +165,7 @@ export function CommandCenter() {
           {fixtures.isLoading && upcoming.length === 0 ? (
             <FixturesLoading />
           ) : fixtures.isError ? (
-            <ErrorRow message={(fixtures.error as Error)?.message ?? "Catalog unavailable"} />
+            <ErrorRow message={errorMessage(fixtures.error, "Catalog unavailable")} />
           ) : upcoming.length === 0 ? (
             <EmptyRow text="Nothing scheduled — enable leagues in Settings or open the Scanner." />
           ) : (

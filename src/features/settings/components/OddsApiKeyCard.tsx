@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { Block } from "@/components/zs";
 import type { AppSettings } from "@/services/settings/settingsStore";
 
@@ -29,7 +30,7 @@ function KeyRow({ id, title, hint, placeholder, current, onSave }: KeyRowProps) 
       await onSave(draft.trim() || null);
       toast.success(`${title} saved`);
     } catch (err) {
-      toast.error(`Failed to store ${title}: ${(err as Error).message}`);
+      toast.error(`Failed to store ${title}: ${errorMessage(err)}`);
     } finally {
       setBusy(false);
     }

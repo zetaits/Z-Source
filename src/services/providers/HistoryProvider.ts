@@ -5,6 +5,9 @@ export interface HistoryTeamQuery {
   sofaScoreTeamId?: number;
   teamName?: string;
   signal?: AbortSignal;
+  // Skip the read side of history_cache (form aggregate) and refetch from
+  // source. Immutable per-event data (xG) keeps its own long-lived cache.
+  forceRefresh?: boolean;
 }
 
 export interface HistoryMatchQuery {
@@ -18,6 +21,8 @@ export interface HistoryMatchQuery {
   homeFdorgTeamId?: number;
   awayFdorgTeamId?: number;
   signal?: AbortSignal;
+  // See HistoryTeamQuery.forceRefresh.
+  forceRefresh?: boolean;
 }
 
 export interface HistoryProvider {

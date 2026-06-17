@@ -217,6 +217,18 @@
   transform: translateX(0);
 }
 
+/* ───────── SPORT RAIL — workspace switcher hover states ──────────────── */
+
+/* hover an inactive, enabled tile: border + icon snap to accent/fg */
+.zs-rail-item:not(:disabled):not([data-active]):hover .zs-rail-tile {
+  border-color: var(--zs-accent);
+  color: var(--zs-fg);
+}
+.zs-rail-add:hover {
+  color: var(--zs-accent);
+  background: var(--zs-accent-fill);
+}
+
 /* ───────── TICKER — keep existing, just expose pause-on-hover ─────────── */
 
 .zs-ticker { will-change: transform; }

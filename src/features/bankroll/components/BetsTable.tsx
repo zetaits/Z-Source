@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import type { Bet, BetStatus } from "@/domain/bet";
 import type { BankrollSettings } from "@/domain/bankroll";
 import { clvPct, profitMinor } from "@/domain/bet";
@@ -86,7 +87,7 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
       await settle.mutateAsync({ id: bet.id, status });
       toast.success(`Settled ${status}`);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 
@@ -97,7 +98,7 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
       toast.success("Bet reopened. Ledger reversed.");
       setReopenTarget(null);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 
@@ -108,7 +109,7 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
       toast.success("Bet deleted.");
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 

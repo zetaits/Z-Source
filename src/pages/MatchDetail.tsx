@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { MatchId } from "@/domain/ids";
+import { errorMessage } from "@/lib/errors";
 import type { MarketKey } from "@/domain/market";
 import type { LineSnapshot } from "@/domain/odds";
 import type { ComboPlay, PlayCandidate } from "@/domain/play";
@@ -57,7 +58,7 @@ export function MatchDetail() {
   const lastToastedRef = useRef<string | null>(null);
   useEffect(() => {
     const message = analysis.isError
-      ? (analysis.error as Error | undefined)?.message ?? "Analysis failed"
+      ? errorMessage(analysis.error, "Analysis failed")
       : analysis.data?.status === "error"
         ? analysis.data.message ?? "Analysis failed"
         : null;
@@ -119,7 +120,7 @@ export function MatchDetail() {
         analysis={analysis.data}
         onRun={() => {
           setAnalysisEnabled(true);
-          if (analysisEnabled) void analysis.refetch();
+          if (analysisEnabled) void analysis.reanalyze();
         }}
         isAnalyzing={analysis.isFetching}
         analysisLabel={analysisLabel}
@@ -132,7 +133,7 @@ export function MatchDetail() {
             <AlertCircle className="size-4" />
             <AlertTitle>Analysis failed</AlertTitle>
             <AlertDescription>
-              {(analysis.error as Error)?.message ?? "Unknown error"}
+              {errorMessage(analysis.error)}
             </AlertDescription>
           </Alert>
         )}

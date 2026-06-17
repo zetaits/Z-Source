@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useRef } from "react";
 import { BookId, LeagueId, MatchId, TeamId } from "@/domain/ids";
 import type { H2H, Intangibles, TeamForm } from "@/domain/history";
 import type { CatalogMatch, Match } from "@/domain/match";
@@ -362,7 +363,12 @@ type OddsTrackResult =
   | { kind: "empty-odds"; resolution: ResolutionInfo }
   | { kind: "error"; message: string; resolution?: ResolutionInfo };
 
-const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Promise<AnalysisResult> => {
+const runAnalysis = async (
+  match: CatalogMatch,
+  parentSignal?: AbortSignal,
+  opts: { forceRefresh?: boolean } = {},
+): Promise<AnalysisResult> => {
+  const { forceRefresh = false } = opts;
   const strategy = await loadStrategy();
   const generatedAt = new Date().toISOString();
 
@@ -458,6 +464,7 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
           sofaScoreTeamId: match.home.sofaScoreId,
           teamName: match.home.name,
           signal,
+          forceRefresh,
         }),
       LEG_TIMEOUT_MS,
       undefined,
@@ -469,6 +476,7 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
           sofaScoreTeamId: match.away.sofaScoreId,
           teamName: match.away.name,
           signal,
+          forceRefresh,
         }),
       LEG_TIMEOUT_MS,
       undefined,
@@ -487,6 +495,7 @@ const runAnalysis = async (match: CatalogMatch, parentSignal?: AbortSignal): Pro
           fdorgMatchId: match.fdorgMatchId,
           homeFdorgTeamId: match.home.fdorgTeamId,
           awayFdorgTeamId: match.away.fdorgTeamId,
+          forceRefresh,
           signal,
         }),
       LEG_TIMEOUT_MS,
@@ -669,14 +678,26 @@ export const useAnalysis = (
   opts: { enabled: boolean } = { enabled: false },
 ) => {
   const strategyKey = match ? match.catalogId : "none";
-  return useQuery({
+  // Set by reanalyze() so the next queryFn run bypasses the free history caches
+  // (SofaScore form/h2h). Consumed once, then reset.
+  const forceRef = useRef(false);
+  const query = useQuery({
     queryKey: ["analysis", strategyKey] as const,
     queryFn: async ({ signal }) => {
-      const result = await runAnalysis(match!, signal);
+      const forceRefresh = forceRef.current;
+      forceRef.current = false;
+      const result = await runAnalysis(match!, signal, { forceRefresh });
       return { ...result, fingerprint: strategyFingerprint(result.strategy) };
     },
     enabled: Boolean(match) && opts.enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
+
+  const reanalyze = useCallback(() => {
+    forceRef.current = true;
+    return query.refetch();
+  }, [query]);
+
+  return Object.assign(query, { reanalyze });
 };

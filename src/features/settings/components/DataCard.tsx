@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +58,7 @@ export function DataCard() {
       triggerDownload(`z-source-bets-${timestamp()}.csv`, betsToCsv(bets), "text/csv");
       toast.success(`Exported ${bets.length} bets`);
     } catch (err) {
-      toast.error("Export failed", { description: (err as Error).message });
+      toast.error("Export failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }
@@ -77,7 +78,7 @@ export function DataCard() {
       );
       toast.success(`Exported ${entries.length} ledger entries`);
     } catch (err) {
-      toast.error("Export failed", { description: (err as Error).message });
+      toast.error("Export failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }
@@ -94,7 +95,7 @@ export function DataCard() {
       );
       toast.success("Exported strategy config");
     } catch (err) {
-      toast.error("Export failed", { description: (err as Error).message });
+      toast.error("Export failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }
@@ -110,7 +111,7 @@ export function DataCard() {
       }
       setPreview({ file, betCount: bets.length, errors });
     } catch (err) {
-      toast.error("Could not read file", { description: (err as Error).message });
+      toast.error("Could not read file", { description: errorMessage(err) });
     }
   };
 
@@ -133,7 +134,7 @@ export function DataCard() {
       setPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
-      toast.error("Import failed", { description: (err as Error).message });
+      toast.error("Import failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }

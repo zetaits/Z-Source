@@ -9,6 +9,7 @@ import {
 import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { ThemeMenu } from "@/features/tweaks/ThemeMenu";
 import { HelpMenu } from "@/features/help/HelpMenu";
+import { useSport } from "@/features/sport/SportContext";
 import { isPersistentStorage } from "@/storage";
 
 interface Props {
@@ -21,6 +22,7 @@ const isMac =
 
 export function Topbar({ onOpenPalette }: Props) {
   const persistent = isPersistentStorage();
+  const { sport } = useSport();
   const balanceQ = useCurrentBalance();
   const exposureQ = useOpenExposure();
   const settingsQ = useBankrollSettings();
@@ -119,7 +121,7 @@ export function Topbar({ onOpenPalette }: Props) {
         }}
       >
         <span style={{ color: "var(--zs-accent)", fontWeight: 700 }}>{">>"}</span>
-        <span>search fixtures, rules, markets…</span>
+        <span>search {sport.unit}, rules, markets…</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
           <span className="zs-kbd">{isMac ? "⌘" : "Ctrl"}</span>
           <span className="zs-kbd">K</span>

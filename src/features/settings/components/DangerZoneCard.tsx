@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,7 +78,7 @@ export function DangerZoneCard() {
       });
       setOpen(false);
     } catch (err) {
-      toast.error("Reset failed", { description: (err as Error).message });
+      toast.error("Reset failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }
@@ -101,7 +102,7 @@ export function DangerZoneCard() {
         description: `${bets} bets · ledger reset to 10 units · pick_outcomes mirrored. Open /bankroll and /metrics for screenshots.`,
       });
     } catch (err) {
-      toast.error("Seed failed", { description: (err as Error).message });
+      toast.error("Seed failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }
@@ -116,7 +117,7 @@ export function DangerZoneCard() {
         description: "Bets, ledger and pick_outcomes with the demo prefix removed.",
       });
     } catch (err) {
-      toast.error("Clear failed", { description: (err as Error).message });
+      toast.error("Clear failed", { description: errorMessage(err) });
     } finally {
       setBusy(null);
     }

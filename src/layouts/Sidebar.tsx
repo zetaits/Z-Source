@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useSport } from "@/features/sport/SportContext";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { resolveProviders } from "@/services/providers/factory";
 import type { QuotaTracker } from "@/services/http/quotaTracker";
@@ -57,26 +58,10 @@ export function Sidebar() {
 }
 
 function LogoBlock() {
+  const { sport } = useSport();
   return (
     <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid var(--zs-border)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            background: "var(--zs-accent)",
-            color: "var(--zs-bg)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: "var(--font-display)",
-            fontWeight: 900,
-            fontSize: 22,
-            letterSpacing: "-0.04em",
-          }}
-        >
-          Z
-        </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
         <div
           style={{
             fontFamily: "var(--font-display)",
@@ -88,6 +73,17 @@ function LogoBlock() {
           }}
         >
           Z—SOURCE
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 9,
+            color: "var(--zs-fg-muted)",
+            letterSpacing: "0.12em",
+            lineHeight: 1,
+          }}
+        >
+          {sport.code}
         </div>
       </div>
     </div>

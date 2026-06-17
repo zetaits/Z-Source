@@ -20,13 +20,17 @@ export interface FallbackOddsProviderOpts {
   onAttempts?(attempts: FallbackAttempt[], operation: string): void;
 }
 
+// Retryable = abandon this provider, fall through to the next. Includes auth
+// failures (401/403, "not configured") since another provider may have valid
+// credentials. 5xx is matched as a status token (\b5\d\d\b); a bare "5" also
+// matched "350ms", "v5", etc.
 const isRetryable = (err: unknown): boolean => {
   const msg = (err as Error | undefined)?.message ?? "";
   return (
     msg.includes("rate limit") ||
     msg.includes("quota") ||
     msg.includes("429") ||
-    msg.includes("5") ||
+    /\b5\d\d\b/.test(msg) ||
     msg.toLowerCase().includes("network") ||
     msg.includes("401") ||
     msg.includes("403") ||

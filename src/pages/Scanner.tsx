@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { Block, FlagChip, HourStrip, ScreenHeader, Tag } from "@/components/zs";
 import { findLeagueById } from "@/config/leagues";
 import type { CatalogMatch } from "@/domain/match";
@@ -8,6 +9,7 @@ import { useScannerFilters } from "@/features/scanner/hooks/useScannerFilters";
 import type { StatusFilter, SortKey } from "@/features/scanner/hooks/useScannerFilters";
 import { useFixturesWindow } from "@/features/fixtures/useFixturesWindow";
 import { useSettings } from "@/features/settings/hooks/useSettings";
+import { useSport } from "@/features/sport/SportContext";
 import { localDayKey } from "@/services/catalog/windowFixtures";
 import { formatRelativeShort } from "@/lib/time";
 
@@ -17,6 +19,12 @@ interface LeagueGroup {
   countryCode: string;
   matches: CatalogMatch[];
 }
+
+// Sports wired to a live engine feed today. Others render in the rail and
+// re-label every screen, but their board shows the "feed not yet enabled"
+// empty state until a provider is keyed to them. Add an id here once its
+// fixtures are fetched per sport.id from the engine.
+const SPORTS_WITH_FEED = new Set<string>(["football"]);
 
 const targetLocalDayKey = (offset: number): string => {
   const d = new Date();
@@ -65,6 +73,8 @@ const groupByLeague = (matches: CatalogMatch[]): LeagueGroup[] => {
 export function Scanner() {
   const [offset, setOffset] = useState(0);
   const { data: settings } = useSettings();
+  const { sport } = useSport();
+  const hasFeed = SPORTS_WITH_FEED.has(sport.id);
   const fixtures = useFixturesWindow();
   const { filters, apply, update } = useScannerFilters();
 
@@ -93,7 +103,7 @@ export function Scanner() {
   const lastErrRef = useRef<string | null>(null);
   useEffect(() => {
     const msg = fixtures.isError
-      ? (fixtures.error as Error | undefined)?.message ?? "Catalog fetch failed"
+      ? errorMessage(fixtures.error, "Catalog fetch failed")
       : null;
     if (msg && msg !== lastErrRef.current) {
       lastErrRef.current = msg;
@@ -105,11 +115,15 @@ export function Scanner() {
   return (
     <div style={{ padding: "28px 32px 48px" }}>
       <ScreenHeader
-        bracket={`SCANNER · 72H WINDOW · ${enabledCount} LEAGUES`}
+        bracket={`SCANNER · ${sport.label.toUpperCase()} · 72H WINDOW`}
         title="FIXTURE BOARD"
-        sub={`${todayLabel.toUpperCase()} · ${dayMatches.length} fixture${dayMatches.length === 1 ? "" : "s"}${
-          nextUp ? ` · next whistle ${formatRelativeShort(nextUp.kickoffAt)}` : ""
-        }`}
+        sub={
+          hasFeed
+            ? `${todayLabel.toUpperCase()} · ${dayMatches.length} ${sport.unit}${
+                nextUp ? ` · ${sport.nextLabel} ${formatRelativeShort(nextUp.kickoffAt)}` : ""
+              }`
+            : sport.competitions
+        }
         right={
           <>
             <button
@@ -125,6 +139,8 @@ export function Scanner() {
           </>
         }
       />
+
+      <MarketsRow markets={sport.markets} />
 
       {enabledCount === 0 && (
         <div
@@ -146,38 +162,85 @@ export function Scanner() {
         </div>
       )}
 
-      <div data-tour-id="scanner-list">
-        <DayStrip fixtures={fixtures.data} offset={offset} onChange={setOffset} />
-      </div>
-
-      <FilterBar
-        status={filters.status}
-        sort={filters.sort}
-        onStatus={(s) => update({ status: s })}
-        onSort={(s) => update({ sort: s })}
-        showing={filtered.length}
-      />
-
-      {nextUp && <NextUpStrip match={nextUp} />}
-
-      {fixtures.isLoading ? (
-        <Loading />
-      ) : groups.length > 0 ? (
-        groups.map((g) => <LeagueBlock key={g.leagueId} group={g} />)
+      {!hasFeed ? (
+        <FeedNotEnabled sport={sport} />
       ) : (
-        <div
-          className="zs-block"
-          style={{
-            padding: "26px 18px",
-            textAlign: "center",
-            fontFamily: "var(--font-mono)",
-            fontSize: 12,
-            color: "var(--zs-fg-muted)",
-          }}
-        >
-          NO FIXTURES ON {todayLabel.toUpperCase()} — try a different day or enable more leagues.
-        </div>
+        <>
+          <div data-tour-id="scanner-list">
+            <DayStrip fixtures={fixtures.data} offset={offset} onChange={setOffset} />
+          </div>
+
+          <FilterBar
+            status={filters.status}
+            sort={filters.sort}
+            onStatus={(s) => update({ status: s })}
+            onSort={(s) => update({ sort: s })}
+            showing={filtered.length}
+          />
+
+          {nextUp && <NextUpStrip match={nextUp} />}
+
+          {fixtures.isLoading ? (
+            <Loading />
+          ) : groups.length > 0 ? (
+            groups.map((g) => <LeagueBlock key={g.leagueId} group={g} />)
+          ) : (
+            <div
+              className="zs-block"
+              style={{
+                padding: "26px 18px",
+                textAlign: "center",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                color: "var(--zs-fg-muted)",
+              }}
+            >
+              NO FIXTURES ON {todayLabel.toUpperCase()} — try a different day or enable more leagues.
+            </div>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function MarketsRow({ markets }: { markets: string[] }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+        marginBottom: 18,
+      }}
+    >
+      <span className="zs-caption" style={{ marginRight: 4 }}>
+        MARKETS
+      </span>
+      {markets.map((m, i) => (
+        <Tag key={m} tone={i === 0 ? "amber" : "default"}>
+          {m}
+        </Tag>
+      ))}
+    </div>
+  );
+}
+
+function FeedNotEnabled({ sport }: { sport: { unit: string; label: string } }) {
+  return (
+    <div
+      className="zs-block"
+      style={{
+        padding: "44px 18px",
+        textAlign: "center",
+        fontFamily: "var(--font-mono)",
+        fontSize: 12,
+        color: "var(--zs-fg-muted)",
+        letterSpacing: "0.06em",
+      }}
+    >
+      ── no {sport.unit} in window · {sport.label} feed not yet enabled ──
     </div>
   );
 }

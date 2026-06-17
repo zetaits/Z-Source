@@ -10,8 +10,9 @@
     "devUrl": "http://localhost:8080"
   },
   "app": {
+    "withGlobalTauri": true,
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:8080 http://localhost:8080 https://api.sofascore.com https://www.sofascore.com https://api.football-data.org https://api.odds-api.io https://api.actionnetwork.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
     },
     "windows": [
       {

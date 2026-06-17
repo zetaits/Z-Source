@@ -8,6 +8,9 @@ export const fairDecimal = (prob: number): number => {
   return 1 / prob;
 };
 
+// sum <= 0 means invalid input (all decimals <= 1). Zeros are a safe sentinel:
+// zero fair prob -> negative edge -> selection filtered out, rather than
+// fabricating a uniform distribution from missing odds.
 export const removeVig = (probs: number[]): number[] => {
   const sum = probs.reduce((a, b) => a + b, 0);
   if (sum <= 0) return probs.map(() => 0);

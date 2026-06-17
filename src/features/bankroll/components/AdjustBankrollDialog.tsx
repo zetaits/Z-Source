@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import type { LedgerKind } from "@/domain/bankroll";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,7 +57,7 @@ export function AdjustBankrollDialog({ mode, open, onOpenChange }: Props) {
       setNote("");
       onOpenChange(false);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 

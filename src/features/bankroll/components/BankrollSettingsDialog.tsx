@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import type { BankrollSettings } from "@/domain/bankroll";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +65,7 @@ export function BankrollSettingsDialog({ open, onOpenChange, current, onReset }:
       toast.success("Bankroll settings saved");
       onOpenChange(false);
     } catch (err) {
-      toast.error(`Failed: ${(err as Error).message}`);
+      toast.error(`Failed: ${errorMessage(err)}`);
     }
   };
 
