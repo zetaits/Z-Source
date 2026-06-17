@@ -11,9 +11,14 @@ import {
   windowSofaRemainingQueryKey,
 } from "./services/catalog/windowFixtures";
 import { bootstrapQuotaTrackers } from "./services/http/quotaBootstrap";
+import { bootstrapDiscoveredLeagues } from "./services/catalog/oddsApiIoLeagues";
 import "./index.css";
 
 void bootstrapQuotaTrackers();
+// Hydrate the discovered-league registry from the odds provider's catalog.
+// Non-blocking: on completion it invalidates the fixtures queries so the
+// prefetch below re-runs with any auto-enabled competitions included.
+void bootstrapDiscoveredLeagues();
 
 void Promise.all([
   queryClient.prefetchQuery({

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { LeagueId } from "@/domain/ids";
 import type { CatalogMatch, League, MatchStatus } from "@/domain/match";
-import { LEAGUES, type LeagueDef } from "@/config/leagues";
+import { allLeagues, type LeagueDef } from "@/config/leagues";
 import { httpRequest, HttpError } from "@/services/http/httpClient";
 import { oddsApiIoQuota } from "@/services/http/quotaTracker";
 import type { CatalogProvider } from "@/services/providers/CatalogProvider";
@@ -85,7 +85,7 @@ const fetchAllEvents = async (config: OddsApiIoCatalogConfig): Promise<IoEvent[]
 const buildSlugIndex = (leagueIds: LeagueId[]): Map<string, LeagueDef> => {
   const idSet = new Set<string>(leagueIds.map((id) => String(id)));
   const map = new Map<string, LeagueDef>();
-  for (const l of LEAGUES) {
+  for (const l of allLeagues()) {
     if (!idSet.has(l.id)) continue;
     for (const slug of l.oddsApiIoSlugs ?? []) {
       map.set(slug, l);
@@ -100,7 +100,7 @@ export const createOddsApiIoCatalogProvider = (
   name: "odds-api-io-catalog",
 
   async listLeagues(): Promise<League[]> {
-    return LEAGUES.filter((l) => (l.oddsApiIoSlugs?.length ?? 0) > 0).map((l) => ({
+    return allLeagues().filter((l) => (l.oddsApiIoSlugs?.length ?? 0) > 0).map((l) => ({
       id: l.id,
       name: l.name,
       countryCode: l.countryCode,

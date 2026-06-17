@@ -1,5 +1,6 @@
 import { LeagueId } from "@/domain/ids";
 import type { League } from "@/domain/match";
+import { getDiscovered } from "@/services/catalog/discoveredLeagues";
 
 export interface LeagueDef extends League {
   oddsApiKey: string;
@@ -9,6 +10,12 @@ export interface LeagueDef extends League {
   // odds-api.io league slugs. Array because some competitions split into
   // seasonal stages (e.g. Liga MX Clausura/Apertura) with different slugs.
   oddsApiIoSlugs?: string[];
+  // True for leagues discovered at runtime from the odds provider's catalog
+  // (not part of the curated static list). These carry only an odds-api.io slug
+  // — no the-odds-api key, SofaScore id, or football-data code.
+  discovered?: boolean;
+  // Upcoming-event count reported by the discovery source (popularity signal).
+  eventsCount?: number;
 }
 
 export const LEAGUES: LeagueDef[] = [
@@ -131,6 +138,20 @@ export const LEAGUES: LeagueDef[] = [
     oddsApiIoSlugs: ["international-clubs-uefa-conference-league"],
   },
   {
+    id: LeagueId("worldcup"),
+    name: "FIFA World Cup",
+    countryCode: "INT",
+    tier: 0,
+    // sportKey is ignored by the odds-api.io provider (it lists all football
+    // events globally and fuzzy-matches by team name); kept for correctness.
+    oddsApiKey: "soccer_fifa_world_cup",
+    sofaScoreId: 16,
+    defaultEnabled: true,
+    // Routes fixtures through the odds-api.io catalog, so every surfaced match
+    // is priceable by construction. Slug verified live (63 events, 2026 cycle).
+    oddsApiIoSlugs: ["international-fifa-world-cup"],
+  },
+  {
     id: LeagueId("mls"),
     name: "MLS",
     countryCode: "US",
@@ -172,11 +193,18 @@ export const LEAGUES: LeagueDef[] = [
   },
 ];
 
+// Curated leagues + runtime-discovered ones. Curated entries always take
+// precedence (they carry the full cross-provider mapping); discovery drops any
+// candidate that collides with a curated slug before registering.
+export const allLeagues = (): LeagueDef[] => [...LEAGUES, ...getDiscovered()];
+
 export const findLeagueByOddsKey = (key: string): LeagueDef | undefined =>
   LEAGUES.find((l) => l.oddsApiKey === key);
 
+// SofaScore ids only exist on curated leagues; discovered ones use 0 as a
+// sentinel, so guard against a spurious match on 0.
 export const findLeagueBySofa = (id: number): LeagueDef | undefined =>
-  LEAGUES.find((l) => l.sofaScoreId === id);
+  id ? LEAGUES.find((l) => l.sofaScoreId === id) : undefined;
 
 export const findLeagueById = (id: string): LeagueDef | undefined =>
-  LEAGUES.find((l) => l.id === id);
+  LEAGUES.find((l) => l.id === id) ?? getDiscovered().find((l) => l.id === id);

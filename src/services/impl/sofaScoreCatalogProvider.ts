@@ -1,6 +1,6 @@
 import { LeagueId } from "@/domain/ids";
 import type { CatalogMatch, League } from "@/domain/match";
-import { LEAGUES, findLeagueBySofa, type LeagueDef } from "@/config/leagues";
+import { allLeagues, findLeagueById, findLeagueBySofa, type LeagueDef } from "@/config/leagues";
 import { httpRequest, HttpError } from "@/services/http/httpClient";
 import type { CatalogProvider } from "@/services/providers/CatalogProvider";
 import {
@@ -98,7 +98,7 @@ const aliasesFor = (t: { shortName?: string; nameCode?: string }): string[] => {
 export const sofaScoreCatalogProvider: CatalogProvider = {
   name: "sofascore",
   async listLeagues() {
-    return LEAGUES.map<League>((l) => ({
+    return allLeagues().map<League>((l) => ({
       id: l.id,
       name: l.name,
       countryCode: l.countryCode,
@@ -108,7 +108,9 @@ export const sofaScoreCatalogProvider: CatalogProvider = {
     }));
   },
   async listFixtures({ leagueIds, from, to }) {
-    const enabledLeagues = LEAGUES.filter((l) => leagueIds.includes(l.id));
+    const enabledLeagues = leagueIds
+      .map((id) => findLeagueById(String(id)))
+      .filter((l): l is LeagueDef => Boolean(l));
     const fromMs = from.getTime();
     const toMs = to.getTime();
     const results: CatalogMatch[] = [];

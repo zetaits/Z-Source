@@ -1,6 +1,6 @@
 import type { CatalogMatch } from "@/domain/match";
 import { LeagueId } from "@/domain/ids";
-import { LEAGUES, type LeagueDef } from "@/config/leagues";
+import { findLeagueById, type LeagueDef } from "@/config/leagues";
 import { createFootballDataCatalogProvider } from "@/services/impl/footballDataProvider";
 import { createOddsApiIoCatalogProvider } from "@/services/impl/oddsApiIoCatalogProvider";
 import { sofaScoreCatalogProvider } from "@/services/impl/sofaScoreCatalogProvider";
@@ -44,7 +44,7 @@ const partitionLeagues = (
   const oddsIo: LeagueId[] = [];
   const sofa: LeagueId[] = [];
   for (const id of ids) {
-    const def: LeagueDef | undefined = LEAGUES.find((l) => l.id === id);
+    const def: LeagueDef | undefined = findLeagueById(String(id));
     if (!def) {
       sofa.push(id);
       continue;
