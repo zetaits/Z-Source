@@ -3,7 +3,6 @@ import { LeagueId } from "@/domain/ids";
 import { findLeagueById, type LeagueDef } from "@/config/leagues";
 import { createFootballDataCatalogProvider } from "@/services/impl/footballDataProvider";
 import { createOddsApiIoCatalogProvider } from "@/services/impl/oddsApiIoCatalogProvider";
-import { sofaScoreCatalogProvider } from "@/services/impl/sofaScoreCatalogProvider";
 import { settingsStore } from "@/services/settings/settingsStore";
 import { isPersistentStorage } from "@/storage";
 import { matchesCacheRepo } from "@/storage/repos/matchesCacheRepo";
@@ -25,30 +24,20 @@ export const windowOddsIoQueryKey = [
   WINDOW_FIXTURES_DAYS,
 ] as const;
 
-export const windowSofaRemainingQueryKey = [
-  "commandCenter",
-  "fixtures",
-  "sofa-remaining",
-  WINDOW_FIXTURES_DAYS,
-] as const;
-
 // odds-api.io is preferred over fdorg because its team names match the odds
 // payload exactly (no fuzzy resolver step needed downstream). fdorg only kicks
-// in for leagues we haven't mapped a slug for. sofa is the last-resort filler.
+// in for leagues we haven't mapped a slug for. Leagues with neither are skipped
+// (SofaScore, the former last-resort filler, was removed).
 const partitionLeagues = (
   ids: LeagueId[],
   hasFdorgKey: boolean,
   hasOddsIoKey: boolean,
-): { fdorg: LeagueId[]; oddsIo: LeagueId[]; sofa: LeagueId[] } => {
+): { fdorg: LeagueId[]; oddsIo: LeagueId[] } => {
   const fdorg: LeagueId[] = [];
   const oddsIo: LeagueId[] = [];
-  const sofa: LeagueId[] = [];
   for (const id of ids) {
     const def: LeagueDef | undefined = findLeagueById(String(id));
-    if (!def) {
-      sofa.push(id);
-      continue;
-    }
+    if (!def) continue;
     if (hasOddsIoKey && (def.oddsApiIoSlugs?.length ?? 0) > 0) {
       oddsIo.push(id);
       continue;
@@ -57,9 +46,8 @@ const partitionLeagues = (
       fdorg.push(id);
       continue;
     }
-    sofa.push(id);
   }
-  return { fdorg, oddsIo, sofa };
+  return { fdorg, oddsIo };
 };
 
 // Build the window in local time so the day boundaries match what users see.
@@ -166,45 +154,4 @@ export const fetchOddsApiIoWindowFixtures = async (): Promise<CatalogMatch[]> =>
   return fresh;
 };
 
-export const fetchSofaRemainingWindowFixtures = async (): Promise<CatalogMatch[]> => {
-  const settings = await settingsStore.load();
-  const allLeagueIds = settings.enabledLeagueIds.map((id) => LeagueId(id));
-  if (allLeagueIds.length === 0) return [];
-
-  const { sofa: sofaLeagueIds } = partitionLeagues(
-    allLeagueIds,
-    Boolean(settings.footballDataApiKey),
-    Boolean(settings.oddsApiIoKey),
-  );
-  if (sofaLeagueIds.length === 0) {
-    console.info("[fixtures] sofascore: 0 leagues assigned");
-    return [];
-  }
-
-  const { from, to } = buildWindowRange();
-
-  if (isPersistentStorage()) {
-    const cached = await matchesCacheRepo.listInRange({
-      leagueIds: sofaLeagueIds,
-      from,
-      to,
-      maxAgeMs: WINDOW_FIXTURES_TTL_MS,
-    });
-    if (cached !== null) {
-      console.info(`[fixtures] sofascore: ${cached.length} matches (cache hit)`);
-      return cached;
-    }
-  }
-
-  const fresh = await sofaScoreCatalogProvider.listFixtures({
-    leagueIds: sofaLeagueIds,
-    from,
-    to,
-  });
-  console.info(`[fixtures] sofascore: ${fresh.length} matches (fresh)`);
-  if (isPersistentStorage() && fresh.length > 0) {
-    void matchesCacheRepo.upsert(fresh).catch(() => {});
-  }
-  return fresh;
-};
 

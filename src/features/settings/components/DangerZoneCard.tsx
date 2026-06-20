@@ -17,7 +17,6 @@ import { queryClient } from "@/services/cache/queryClient";
 import {
   fetchFdorgWindowFixtures,
   fetchOddsApiIoWindowFixtures,
-  fetchSofaRemainingWindowFixtures,
 } from "@/services/catalog/windowFixtures";
 import { getStorage, isPersistentStorage } from "@/storage";
 
@@ -69,7 +68,6 @@ export function DangerZoneCard() {
       const refetched = await Promise.all([
         fetchFdorgWindowFixtures().catch(() => []),
         fetchOddsApiIoWindowFixtures().catch(() => []),
-        fetchSofaRemainingWindowFixtures().catch(() => []),
       ]);
       const repopulated = refetched.reduce((sum, list) => sum + list.length, 0);
 

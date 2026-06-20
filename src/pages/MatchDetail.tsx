@@ -213,6 +213,7 @@ export function MatchDetail() {
           <MarketTab
             splits={analysis.data?.splits ?? {}}
             lines={analysis.data?.lines ?? {}}
+            allCandidates={analysis.data?.allCandidates ?? []}
             homeName={match.home.name}
             awayName={match.away.name}
             matchId={lineMatchId}

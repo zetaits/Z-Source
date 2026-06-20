@@ -79,7 +79,7 @@ export const sharpSquareDetector: Rule = {
       strength,
       weight: config.weight,
       message,
-      data: { pattern, betsPct, moneyPct, shiftPct, isUnderdog, price: price.decimal },
+      data: { pattern, betsPct, moneyPct, shiftPct, isUnderdog, price: price.decimal, strength },
     });
 
     // 1. REVERSE_LINE_MOVEMENT — few public tickets but line shortened

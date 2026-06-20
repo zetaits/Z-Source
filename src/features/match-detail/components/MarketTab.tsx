@@ -1,34 +1,44 @@
 import type { MatchId } from "@/domain/ids";
-import type { MarketKey } from "@/domain/market";
+import type { MarketKey, Selection } from "@/domain/market";
 import type { LineSnapshot } from "@/domain/odds";
-import type { SplitData, Splits } from "@/domain/splits";
+import type { PlayCandidate } from "@/domain/play";
+import type { Splits } from "@/domain/splits";
 import { Block, Tag } from "@/components/zs";
 import { marketByKey } from "@/config/markets";
+import {
+  extractMarketSignals,
+  topPublicLean,
+  type MarketSignal,
+  type PublicLean,
+} from "../marketSignals";
 import { LineHistoryPanel } from "./LineHistoryPanel";
 
 interface Props {
   splits: Partial<Record<MarketKey, Splits>>;
   lines: Partial<Record<MarketKey, LineSnapshot>>;
+  allCandidates: PlayCandidate[];
   homeName: string;
   awayName: string;
   matchId: MatchId | null;
 }
 
-interface DivergenceTop {
-  marketKey: MarketKey;
-  sideLabel: string;
-  oppositeLabel: string;
-  deltaPp: number;
-  sharpLeansHome: boolean | null;
-}
-
 const formatSelectionLabel = (
   marketKey: MarketKey,
-  row: SplitData,
+  selection: Selection,
   homeName: string,
   awayName: string,
 ): string => {
-  const { side, line } = row.selection;
+  // Player props (e.g. baseball pitcher strikeouts) carry a player + propLabel.
+  if (selection.player) {
+    const side =
+      selection.side === "over"
+        ? "Over"
+        : selection.side === "under"
+          ? "Under"
+          : selection.side;
+    return `${selection.player} ${selection.propLabel ?? selection.marketKey} ${side} ${selection.line ?? ""}`.trim();
+  }
+  const { side, line } = selection;
   let base: string;
   if (side === "home") base = homeName;
   else if (side === "away") base = awayName;
@@ -43,44 +53,6 @@ const formatSelectionLabel = (
     base += ` ${sign}${line}`;
   }
   return base;
-};
-
-const computeTopDivergence = (
-  splits: Partial<Record<MarketKey, Splits>>,
-  homeName: string,
-  awayName: string,
-): DivergenceTop | null => {
-  let best: DivergenceTop | null = null;
-  for (const [marketKey, group] of Object.entries(splits) as [MarketKey, Splits][]) {
-    for (const row of group.rows) {
-      if (typeof row.betsPct !== "number" || typeof row.moneyPct !== "number") continue;
-      const delta = row.moneyPct - row.betsPct;
-      if (!best || Math.abs(delta) > Math.abs(best.deltaPp)) {
-        const sideLabel = formatSelectionLabel(marketKey, row, homeName, awayName);
-        // pick a paired opposite for narrative
-        const opposite = group.rows.find(
-          (r) => r.selection.side !== row.selection.side,
-        );
-        const oppositeLabel = opposite
-          ? formatSelectionLabel(marketKey, opposite, homeName, awayName)
-          : "public";
-        const sharpHome =
-          row.selection.side === "home"
-            ? delta > 0
-            : row.selection.side === "away"
-              ? delta < 0
-              : null;
-        best = {
-          marketKey,
-          sideLabel,
-          oppositeLabel,
-          deltaPp: Math.round(delta),
-          sharpLeansHome: sharpHome,
-        };
-      }
-    }
-  }
-  return best;
 };
 
 interface SplitRowVM {
@@ -101,7 +73,7 @@ const buildSplitRows = (
     const hasBoth =
       typeof row.betsPct === "number" && typeof row.moneyPct === "number";
     return {
-      label: formatSelectionLabel(marketKey, row, homeName, awayName),
+      label: formatSelectionLabel(marketKey, row.selection, homeName, awayName),
       betsPct: row.betsPct,
       moneyPct: row.moneyPct,
       deltaPp: hasBoth ? Math.round(row.moneyPct! - row.betsPct!) : null,
@@ -109,9 +81,10 @@ const buildSplitRows = (
     };
   });
 
-export function MarketTab({ splits, homeName, awayName, matchId }: Props) {
+export function MarketTab({ splits, allCandidates, homeName, awayName, matchId }: Props) {
   const splitEntries = Object.entries(splits) as [MarketKey, Splits][];
-  const top = computeTopDivergence(splits, homeName, awayName);
+  const { top } = extractMarketSignals(allCandidates);
+  const publicLean = topPublicLean(splits);
 
   const totalSplitsRows = splitEntries.reduce(
     (acc, [, group]) => acc + group.rows.length,
@@ -120,7 +93,14 @@ export function MarketTab({ splits, homeName, awayName, matchId }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {top && <SignalHero top={top} />}
+      {splitEntries.length > 0 && (
+        <SignalHero
+          signal={top}
+          publicLean={publicLean}
+          homeName={homeName}
+          awayName={awayName}
+        />
+      )}
 
       <div
         style={{
@@ -192,21 +172,58 @@ export function MarketTab({ splits, homeName, awayName, matchId }: Props) {
   );
 }
 
-function SignalHero({ top }: { top: DivergenceTop }) {
-  const sharpFill = "color-mix(in oklch, var(--zs-info) 8%, transparent)";
-  const sharpColor =
-    Math.abs(top.deltaPp) >= 15 ? "var(--zs-info)" : "var(--zs-fg-muted)";
-  const signal =
-    Math.abs(top.deltaPp) >= 15
-      ? "SHARP DIVERGENCE"
-      : Math.abs(top.deltaPp) >= 5
-        ? "MILD DIVERGENCE"
-        : "FLAT";
+/** Short pattern label + tone for each engine pattern. */
+const PATTERN_META: Record<
+  MarketSignal["pattern"],
+  { label: string; lead: string }
+> = {
+  SHARP_MONEY_DIVERGENCE: { label: "MONEY DIVERGENCE", lead: "Sharp money on" },
+  REVERSE_LINE_MOVEMENT: { label: "REVERSE LINE MOVE", lead: "Sharp money on" },
+  PUBLIC_DOG_TRAP_CONFIRMED: { label: "DOG TRAP", lead: "Public trap on" },
+  PURE_FADE_PUBLIC: { label: "PUBLIC FADE", lead: "Heavy public on" },
+  FLAT: { label: "FLAT", lead: "" },
+};
 
-  const descriptor = marketByKey(top.marketKey)?.label ?? top.marketKey;
+function SignalHero({
+  signal,
+  publicLean,
+  homeName,
+  awayName,
+}: {
+  signal: MarketSignal | null;
+  publicLean: PublicLean | null;
+  homeName: string;
+  awayName: string;
+}) {
+  // SUPPORT = be on this side (sharp). AGAINST = fade this side (public/square).
+  const isSharp = signal?.verdict === "SUPPORT";
+  const isFade = signal?.verdict === "AGAINST";
+  const accent = isSharp
+    ? "var(--zs-info)"
+    : isFade
+      ? "var(--zs-warn)"
+      : "var(--zs-fg-muted)";
+  const fill = `color-mix(in oklch, ${accent} 8%, transparent)`;
+
+  const badge = isSharp ? "SHARP MONEY" : isFade ? "FADE PUBLIC" : "FLAT";
+  const meta = PATTERN_META[signal?.pattern ?? "FLAT"];
+  const market = signal ? signal.marketKey : publicLean?.marketKey ?? null;
+  const descriptor = market ? marketByKey(market)?.label ?? market : "MATCH";
+
+  const sideLabel = signal
+    ? formatSelectionLabel(signal.marketKey, signal.selection, homeName, awayName)
+    : null;
+  const deltaPp =
+    signal && signal.moneyPct !== undefined && signal.betsPct !== undefined
+      ? Math.round(signal.moneyPct - signal.betsPct)
+      : null;
+
+  const leanLabel = publicLean
+    ? formatSelectionLabel(publicLean.marketKey, publicLean.selection, homeName, awayName)
+    : null;
 
   return (
-    <div className="zs-block" style={{ padding: 0, borderColor: sharpColor }}>
+    <div className="zs-block" style={{ padding: 0, borderColor: accent }}>
       <div
         style={{
           display: "grid",
@@ -221,23 +238,23 @@ function SignalHero({ top }: { top: DivergenceTop }) {
             flexDirection: "column",
             justifyContent: "center",
             gap: 8,
-            background: sharpFill,
+            background: fill,
             borderRight: "1px solid var(--zs-border)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span
               style={{
-                color: sharpColor,
+                color: accent,
                 fontFamily: "var(--font-mono)",
                 fontSize: 13,
                 fontWeight: 700,
                 letterSpacing: "0.18em",
               }}
             >
-              ◆ {signal}
+              ◆ {badge}
             </span>
-            <Tag tone={Math.abs(top.deltaPp) >= 15 ? "info" : undefined}>
+            <Tag tone={isSharp ? "info" : isFade ? "amber" : undefined}>
               {descriptor}
             </Tag>
           </div>
@@ -250,24 +267,52 @@ function SignalHero({ top }: { top: DivergenceTop }) {
               letterSpacing: "-0.005em",
             }}
           >
-            Money is on{" "}
-            <strong style={{ color: "var(--zs-info)" }}>{top.sideLabel}</strong>{" "}
-            while public sits on{" "}
-            <strong style={{ color: "var(--zs-warn)" }}>{top.oppositeLabel}</strong>.
+            {signal && sideLabel ? (
+              <>
+                {meta.lead}{" "}
+                <strong style={{ color: accent }}>{sideLabel}</strong>.{" "}
+                {isFade ? "Sharps are fading the crowd here." : "Line confirms the move."}
+              </>
+            ) : leanLabel ? (
+              <>
+                Money tracks the public — no sharp divergence. Crowd &amp; cash both
+                on <strong style={{ color: "var(--zs-fg)" }}>{leanLabel}</strong>.
+              </>
+            ) : (
+              <>No crowd-vs-sharp divergence detected.</>
+            )}
           </div>
         </div>
+        {signal ? (
+          <KpiCell
+            k="DIVERGENCE"
+            v={deltaPp === null ? "—" : `${deltaPp > 0 ? "+" : ""}${deltaPp}pp`}
+            sub="money − tickets"
+            tone={accent}
+            border
+          />
+        ) : (
+          <KpiCell
+            k="SPLIT"
+            v={
+              publicLean
+                ? `${Math.round(publicLean.betsPct)}/${
+                    publicLean.moneyPct !== undefined
+                      ? Math.round(publicLean.moneyPct)
+                      : "—"
+                  }`
+                : "—"
+            }
+            sub="tickets / money"
+            tone="var(--zs-fg-muted)"
+            border
+          />
+        )}
         <KpiCell
-          k="DIVERGENCE"
-          v={`${top.deltaPp > 0 ? "+" : ""}${top.deltaPp}pp`}
-          sub="money − tickets"
-          tone={sharpColor}
-          border
-        />
-        <KpiCell
-          k="MARKET"
-          v={top.marketKey.replace("_", " ")}
-          sub="largest signal"
-          tone="var(--zs-fg)"
+          k="PATTERN"
+          v={meta.label}
+          sub={signal ? "engine verdict" : "no divergence"}
+          tone={accent}
           border
         />
       </div>

@@ -20,6 +20,11 @@ const SIDE_LABEL: Record<string, string> = {
 };
 
 const formatSelection = (play: PlayCandidate): string => {
+  // Player props (e.g. baseball pitcher strikeouts) carry a player + propLabel.
+  if (play.selection.player) {
+    const s = play.selection;
+    return `${s.player} ${s.propLabel ?? s.marketKey} ${s.side} ${s.line ?? ""}`.trim();
+  }
   const side = SIDE_LABEL[play.selection.side] ?? play.selection.side;
   const line = play.selection.line !== undefined ? ` ${play.selection.line}` : "";
   return `${play.selection.marketKey} · ${side}${line}`;

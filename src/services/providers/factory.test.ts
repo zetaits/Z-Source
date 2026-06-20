@@ -6,11 +6,12 @@ const base: AppSettings = {
   oddsApiIoKey: null,
   footballDataApiKey: null,
   enabledLeagueIds: ["epl"],
-  catalogProvider: "sofascore",
+  catalogProvider: "none",
   oddsRegion: "eu",
   splitProviderId: "action-network",
-  historyProviderId: "sofascore",
+  historyProviderId: "none",
   userBooks: [],
+  perSport: {},
 };
 
 describe("resolveProviders", () => {

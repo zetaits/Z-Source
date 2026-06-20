@@ -1,15 +1,9 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import type { CatalogMatch } from "@/domain/match";
-import {
-  WINDOW_FIXTURES_TTL_MS,
-  fetchFdorgWindowFixtures,
-  fetchOddsApiIoWindowFixtures,
-  fetchSofaRemainingWindowFixtures,
-  windowFdorgQueryKey,
-  windowOddsIoQueryKey,
-  windowSofaRemainingQueryKey,
-} from "@/services/catalog/windowFixtures";
+import { useSport } from "@/features/sport/SportContext";
+import { getSportModule } from "@/sports";
+import { WINDOW_FIXTURES_TTL_MS } from "@/services/catalog/windowFixtures";
 
 export interface FixturesWindowResult {
   data: CatalogMatch[];
@@ -21,50 +15,42 @@ export interface FixturesWindowResult {
 }
 
 /**
- * Single source of truth for the upcoming-fixtures window. Both Command Center
- * and Scanner consume this, so we never double-fetch and the two views stay in
- * sync. Three providers run in parallel (fdorg, odds-api.io, sofascore) with
- * separate React Query entries so progressive loading still works.
+ * Single source of truth for the upcoming-fixtures window, scoped to the active
+ * sport. The sport module declares its fixture feeds (football merges three for
+ * progressive loading; baseball uses one MLB feed); each gets its own React
+ * Query entry so partial results stream in. Switching sport swaps the feeds.
  */
 export const useFixturesWindow = (): FixturesWindowResult => {
-  const fdorg = useQuery({
-    queryKey: windowFdorgQueryKey,
-    queryFn: fetchFdorgWindowFixtures,
-    staleTime: WINDOW_FIXTURES_TTL_MS,
-    gcTime: 30 * 60_000,
-  });
-  const oddsIo = useQuery({
-    queryKey: windowOddsIoQueryKey,
-    queryFn: fetchOddsApiIoWindowFixtures,
-    staleTime: WINDOW_FIXTURES_TTL_MS,
-    gcTime: 30 * 60_000,
-  });
-  const sofa = useQuery({
-    queryKey: windowSofaRemainingQueryKey,
-    queryFn: fetchSofaRemainingWindowFixtures,
-    staleTime: WINDOW_FIXTURES_TTL_MS,
-    gcTime: 30 * 60_000,
+  const { activeSportId } = useSport();
+  const sources = useMemo(
+    () => getSportModule(activeSportId).fixtureSources(),
+    [activeSportId],
+  );
+
+  const results = useQueries({
+    queries: sources.map((src) => ({
+      queryKey: src.key,
+      queryFn: () => src.fetch(),
+      staleTime: WINDOW_FIXTURES_TTL_MS,
+      gcTime: 30 * 60_000,
+    })),
   });
 
   const data = useMemo<CatalogMatch[]>(() => {
-    const merged = [
-      ...(fdorg.data ?? []),
-      ...(oddsIo.data ?? []),
-      ...(sofa.data ?? []),
-    ];
+    const merged = results.flatMap((r) => r.data ?? []);
     return merged.sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt));
-  }, [fdorg.data, oddsIo.data, sofa.data]);
+  }, [results]);
 
   const refetch = async () => {
-    await Promise.all([fdorg.refetch(), oddsIo.refetch(), sofa.refetch()]);
+    await Promise.all(results.map((r) => r.refetch()));
   };
 
   return {
     data,
-    isLoading: fdorg.isLoading || oddsIo.isLoading || sofa.isLoading,
-    isFetching: fdorg.isFetching || oddsIo.isFetching || sofa.isFetching,
-    isError: fdorg.isError || oddsIo.isError || sofa.isError,
-    error: fdorg.error ?? oddsIo.error ?? sofa.error,
+    isLoading: results.some((r) => r.isLoading),
+    isFetching: results.some((r) => r.isFetching),
+    isError: results.some((r) => r.isError),
+    error: results.find((r) => r.error)?.error,
     refetch,
   };
 };

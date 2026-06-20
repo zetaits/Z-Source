@@ -12,18 +12,35 @@ export type OddsProviderId = (typeof ODDS_PROVIDER_IDS)[number];
 export const SPLIT_PROVIDER_IDS = ["action-network"] as const;
 export type SplitProviderId = (typeof SPLIT_PROVIDER_IDS)[number];
 
-export const HISTORY_PROVIDER_IDS = ["sofascore"] as const;
+// History scraping (SofaScore) was removed; "none" is a no-op provider until a
+// new historical-data source is wired. See nullHistoryProvider.
+export const HISTORY_PROVIDER_IDS = ["none"] as const;
 export type HistoryProviderId = (typeof HISTORY_PROVIDER_IDS)[number];
+
+// Per-sport settings namespace. Shared keys (oddsApiIoKey — one odds-api.io
+// account serves every sport) stay top-level; sport-specific provider keys and
+// selections live here, keyed by sport id. Football currently keeps its keys
+// top-level (footballDataApiKey/historyProviderId) for back-compat; new sports
+// store theirs under perSport without touching the football wiring.
+const sportSettingsSchema = z
+  .object({
+    apiKeys: z.record(z.string(), z.string().nullable()).optional(),
+    providerIds: z.record(z.string(), z.string()).optional(),
+  })
+  .partial();
+
+export type SportSettings = z.infer<typeof sportSettingsSchema>;
 
 const settingsSchema = z.object({
   oddsApiIoKey: z.string().nullable(),
   footballDataApiKey: z.string().nullable(),
   enabledLeagueIds: z.array(z.string()),
-  catalogProvider: z.literal("sofascore"),
+  catalogProvider: z.literal("none"),
   oddsRegion: z.enum(["us", "uk", "eu", "au"]),
   splitProviderId: z.enum(SPLIT_PROVIDER_IDS),
   historyProviderId: z.enum(HISTORY_PROVIDER_IDS),
   userBooks: z.array(z.string()),
+  perSport: z.record(z.string(), sportSettingsSchema).default({}),
 });
 
 export type AppSettings = z.infer<typeof settingsSchema>;
@@ -32,11 +49,12 @@ const defaults = (): AppSettings => ({
   oddsApiIoKey: null,
   footballDataApiKey: null,
   enabledLeagueIds: LEAGUES.filter((l) => l.defaultEnabled).map((l) => String(l.id)),
-  catalogProvider: "sofascore",
+  catalogProvider: "none",
   oddsRegion: "eu",
   splitProviderId: "action-network",
-  historyProviderId: "sofascore",
+  historyProviderId: "none",
   userBooks: ["Bet365", "Sbobet"],
+  perSport: {},
 });
 
 const migrate = (raw: unknown): AppSettings => {
@@ -53,7 +71,10 @@ const migrate = (raw: unknown): AppSettings => {
     ) {
       coerced.splitProviderId = "action-network";
     }
-    if (coerced.historyProviderId === "mock") coerced.historyProviderId = "sofascore";
+    // History scraping removed: any legacy history provider maps to the no-op.
+    if (coerced.historyProviderId !== "none") coerced.historyProviderId = "none";
+    // Catalog no longer has a SofaScore option.
+    if (coerced.catalogProvider !== "none") coerced.catalogProvider = "none";
   }
   const input = coerced ?? raw;
   const parsed = settingsSchema.safeParse(input);

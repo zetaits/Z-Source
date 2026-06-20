@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { useSport } from "@/features/sport/SportContext";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { resolveProviders } from "@/services/providers/factory";
 import type { QuotaTracker } from "@/services/http/quotaTracker";
@@ -58,7 +57,8 @@ export function Sidebar() {
 }
 
 function LogoBlock() {
-  const { sport } = useSport();
+  // Account-wide chrome: no sport state leaks here. Sport scope lives only in
+  // the Scanner's Analysis Desk.
   return (
     <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid var(--zs-border)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
@@ -73,17 +73,6 @@ function LogoBlock() {
           }}
         >
           Z—SOURCE
-        </div>
-        <div
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 9,
-            color: "var(--zs-fg-muted)",
-            letterSpacing: "0.12em",
-            lineHeight: 1,
-          }}
-        >
-          {sport.code}
         </div>
       </div>
     </div>

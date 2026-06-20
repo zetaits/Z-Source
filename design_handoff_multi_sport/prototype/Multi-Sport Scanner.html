@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Z-Source · Multi-Sport Proposal</title>
+  <title>Z-Source · Multi-Sport Scanner</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -14,14 +14,19 @@
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; }
-    .zs-rail-item:hover .zs-rail-tile { border-color: var(--accent) !important; color: var(--fg) !important; }
-    .zs-rail-item[data-active] .zs-rail-tile { color: var(--bg) !important; }
-    .zs-rail-add:hover { color: var(--accent) !important; background: var(--accent-fill) !important; }
+    .zs-nav-item:hover:not(.active) { color: var(--fg) !important; }
+    .zs-desk:hover:not([data-active]) { background: var(--surface) !important; }
+    .zs-desk-add:hover { color: var(--accent) !important; background: var(--accent-fill) !important; }
+    .zs-fix-row:hover { background: var(--surface) !important; }
+    .zs-fix-row:hover .zs-row-analyse { border-color: var(--accent) !important; color: var(--accent) !important; }
+    .zs-ghost-btn:hover { filter: brightness(1.12); }
+    .zs-analyse-btn:hover { filter: brightness(1.1); }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script src="sports.js"></script>
-  <script type="text/babel" data-presets="react" src="switcher-app.jsx"></script>
+  <script type="text/babel" data-presets="react" src="chrome.jsx"></script>
+  <script type="text/babel" data-presets="react" src="scanner.jsx"></script>
 </body>
 </html>

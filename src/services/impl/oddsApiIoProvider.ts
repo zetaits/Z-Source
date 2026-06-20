@@ -419,7 +419,9 @@ export const createOddsApiIoProvider = (
           const awayName = ev.away ?? "";
           const kickoffAt = ev.date ?? "";
           if (!eventId || !homeName || !awayName || !kickoffAt) return null;
-          return { eventId, homeName, awayName, kickoffAt };
+          // leagueName is informational (MLB filtering) — never part of the
+          // null-guard, so a missing league doesn't drop a football event.
+          return { eventId, homeName, awayName, kickoffAt, leagueName: ev.league?.name };
         })
         .filter((e): e is ProviderEvent => e !== null);
     } catch (err) {

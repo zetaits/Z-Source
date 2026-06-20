@@ -3,7 +3,7 @@ import type { MarketKey } from "@/domain/market";
 import type { ComboPlay, PlayCandidate, Verdict } from "@/domain/play";
 import { DEFAULT_COMBO_POLICY } from "@/domain/strategy";
 import type { ReasoningEntry } from "@/domain/trace";
-import type { AnalysisContext } from "./context";
+import type { AnalysisContext, AnalysisContextBase } from "./context";
 import { combine, type BondedMeta } from "./combine";
 import {
   enumerateAnchorCombos,
@@ -15,7 +15,12 @@ import { clamp, edgePct } from "./ev";
 import { MARKET_ADAPTERS } from "./markets";
 import { RULES } from "./rules";
 import { sizeStakeUnits } from "./stake";
-import type { MarketAdapter, Rule, RuleOutput } from "./types";
+import type {
+  DataMissingDiagnostics,
+  EngineBundle,
+  MarketAdapter,
+  RuleOutput,
+} from "./types";
 
 export interface AnalysisDiagnostics {
   selectionsEnumerated: number;
@@ -23,19 +28,42 @@ export interface AnalysisDiagnostics {
   verdictBreakdown: Record<Verdict, number>;
   rulesFired: Record<string, number>;
   rulesSkippedDataMissing: Record<string, number>;
-  dataMissing: {
-    homeForm: boolean;
-    awayForm: boolean;
-    homeXG: boolean;
-    awayXG: boolean;
-    splitsMissing: MarketKey[];
-    openersMissing: MarketKey[];
-    h2hMeetings: number;
-    intangibles: boolean;
-  };
+  dataMissing: DataMissingDiagnostics;
+  /** Set when the active sport has no analysis engine wired yet. */
+  noEngine?: boolean;
   combos?: ComboDiagnostics;
   anchorCombos?: AnchorDiagnostics;
 }
+
+const EMPTY_DATA_MISSING: DataMissingDiagnostics = {
+  homeForm: true,
+  awayForm: true,
+  homeXG: true,
+  awayXG: true,
+  splitsMissing: [],
+  openersMissing: [],
+  h2hMeetings: 0,
+  intangibles: true,
+};
+
+/** Football-specific "missing data" diagnostics, read by DiagnosticsCard. */
+export const footballDiagnose = (ctx: AnalysisContext): DataMissingDiagnostics => ({
+  homeForm: !ctx.homeForm,
+  awayForm: !ctx.awayForm,
+  homeXG: ctx.homeForm?.xGForLast === undefined,
+  awayXG: ctx.awayForm?.xGForLast === undefined,
+  splitsMissing: ctx.strategy.enabledMarkets.filter((m) => !ctx.splits[m]),
+  openersMissing: ctx.strategy.enabledMarkets.filter((m) => !ctx.openers[m]),
+  h2hMeetings: ctx.h2h?.meetings.length ?? 0,
+  intangibles: !ctx.intangibles,
+});
+
+/** Default engine bundle: the football adapters + rules. */
+export const FOOTBALL_BUNDLE: EngineBundle<AnalysisContext> = {
+  adapters: MARKET_ADAPTERS,
+  rules: RULES,
+  diagnose: footballDiagnose,
+};
 
 export interface BondedAnalysisResult {
   candidates: PlayCandidate[];
@@ -61,8 +89,10 @@ const deriveVerdict = (
   return "PASS";
 };
 
-const ruleApplies = (rule: Rule, marketKey: string): boolean =>
-  rule.markets === "*" || rule.markets.includes(marketKey as never);
+const ruleApplies = (
+  rule: { markets: MarketKey[] | "*" },
+  marketKey: string,
+): boolean => rule.markets === "*" || rule.markets.includes(marketKey as never);
 
 const outputToEntry = (o: RuleOutput): ReasoningEntry => ({
   source: "rule",
@@ -77,18 +107,21 @@ export interface RunOptions {
   includePass?: boolean;
 }
 
-export const runBondedAnalysis = (
-  ctx: AnalysisContext,
+export const runBondedAnalysis = <
+  TCtx extends AnalysisContextBase = AnalysisContext,
+>(
+  ctx: TCtx,
   opts: RunOptions = {},
+  bundle: EngineBundle<TCtx> = FOOTBALL_BUNDLE as unknown as EngineBundle<TCtx>,
 ): BondedAnalysisResult => {
   const strategy = ctx.strategy;
   const ruleConfigs = new Map(strategy.rules.map((r) => [r.ruleId, r]));
-  const activeRules = RULES.filter((r) => {
+  const activeRules = bundle.rules.filter((r) => {
     const cfg = ruleConfigs.get(r.id);
     return cfg ? cfg.enabled : true;
   });
 
-  const adapters: MarketAdapter[] = MARKET_ADAPTERS.filter((a) =>
+  const adapters: MarketAdapter<TCtx>[] = bundle.adapters.filter((a) =>
     strategy.enabledMarkets.includes(a.key),
   );
 
@@ -99,16 +132,8 @@ export const runBondedAnalysis = (
     verdictBreakdown: { PASS: 0, LEAN: 0, PLAY: 0, STRONG: 0 },
     rulesFired: {},
     rulesSkippedDataMissing: {},
-    dataMissing: {
-      homeForm: !ctx.homeForm,
-      awayForm: !ctx.awayForm,
-      homeXG: ctx.homeForm?.xGForLast === undefined,
-      awayXG: ctx.awayForm?.xGForLast === undefined,
-      splitsMissing: strategy.enabledMarkets.filter((m) => !ctx.splits[m]),
-      openersMissing: strategy.enabledMarkets.filter((m) => !ctx.openers[m]),
-      h2hMeetings: ctx.h2h?.meetings.length ?? 0,
-      intangibles: !ctx.intangibles,
-    },
+    dataMissing: bundle.diagnose ? bundle.diagnose(ctx) : { ...EMPTY_DATA_MISSING },
+    noEngine: bundle.adapters.length === 0,
   };
 
   for (const adapter of adapters) {

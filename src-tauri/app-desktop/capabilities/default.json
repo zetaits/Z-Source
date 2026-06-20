@@ -14,11 +14,10 @@
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://api.sofascore.com/*" },
-        { "url": "https://www.sofascore.com/*" },
         { "url": "https://api.football-data.org/*" },
         { "url": "https://api.odds-api.io/*" },
-        { "url": "https://api.actionnetwork.com/*" }
+        { "url": "https://api.actionnetwork.com/*" },
+        { "url": "https://statsapi.mlb.com/*" }
       ]
     }
   ]

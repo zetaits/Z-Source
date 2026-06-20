@@ -17,7 +17,8 @@ export type MarketKey =
   | "SOT_TOTAL"
   | "SAVES_GK"
   | "TACKLES_TOTAL"
-  | "THROWINS_OU";
+  | "THROWINS_OU"
+  | "PITCHER_KS";
 
 export type MarketGroup = "main" | "secondary";
 
@@ -32,7 +33,16 @@ export interface Selection {
   marketKey: MarketKey;
   side: string;
   line?: number;
+  /** Player name — present only for player props (e.g. "Rhett Lowder"). */
+  player?: string;
+  /** Short market label for props (e.g. "Strikeouts O/U"). */
+  propLabel?: string;
 }
 
-export const selectionKey = (s: Selection): string =>
-  s.line === undefined ? `${s.marketKey}:${s.side}` : `${s.marketKey}:${s.side}@${s.line}`;
+export const selectionKey = (s: Selection): string => {
+  const base =
+    s.line === undefined ? `${s.marketKey}:${s.side}` : `${s.marketKey}:${s.side}@${s.line}`;
+  // Disambiguate two pitchers sharing the same PITCHER_KS line. Player-less
+  // selections (all football) keep their existing key unchanged.
+  return s.player ? `${base}|${s.player}` : base;
+};

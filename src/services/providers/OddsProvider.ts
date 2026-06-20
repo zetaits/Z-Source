@@ -14,6 +14,8 @@ export interface ProviderEvent {
   homeName: string;
   awayName: string;
   kickoffAt: string;
+  /** odds-api.io league.name (e.g. "USA - MLB") — used for league filtering. */
+  leagueName?: string;
 }
 
 export interface OddsRequestContext {

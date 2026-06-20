@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-06-18T00:10:58.821Z",
+  "projectRoot": "C:\\Users\\zits\\Documents\\Proyectos\\Z-Source",
+  "structure": {
+    "hasPackageJson": true,
+    "hasTsConfig": true,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1781741458821
+}

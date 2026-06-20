@@ -45,26 +45,6 @@ export const httpRequest = async <T = unknown>(
   const host = hostOf(req.url);
   await limiterFor(host, req.rps ?? 1).acquire();
 
-  // SofaScore is behind DataDome and only serves requests from a cleared
-  // sofascore.com context. Under Tauri, route through the hidden proxy webview
-  // (lazy import keeps the Tauri event API out of browser/test builds).
-  if (tauriEnv && /(^|\.)sofascore\.com$/.test(host)) {
-    const accepted = req.acceptStatus ?? [];
-    const { proxyFetch } = await import("./sofaScoreProxy");
-    const { status, body } = await proxyFetch(req.url, req.signal);
-    if (status !== 200 && !accepted.includes(status)) {
-      throw new HttpError(status, req.url, body);
-    }
-    return {
-      status,
-      headers: new Headers(),
-      ok: status >= 200 && status < 300,
-      url: req.url,
-      text: async () => body,
-      json: async () => JSON.parse(body) as T,
-    };
-  }
-
   const headers: Record<string, string> = { ...(req.headers ?? {}) };
   if (req.rotateUA && !headers["User-Agent"]) {
     headers["User-Agent"] = nextUserAgent();

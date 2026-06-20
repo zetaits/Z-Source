@@ -25,21 +25,21 @@ const SPLIT_PROVIDER_LABEL: Record<SplitProviderId, string> = {
 };
 
 const HISTORY_PROVIDER_LABEL: Record<HistoryProviderId, string> = {
-  sofascore: "SofaScore (scraping)",
+  none: "None (no history source)",
 };
 
 const captionStyle = { fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--zs-fg-muted)" } as const;
 const rowStyle = { display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--zs-rule)" } as const;
 
 export function ProvidersCard({ settings }: Props) {
-  const catalogValue = settings.footballDataApiKey ? "football-data" : "sofascore";
+  const hasFdorg = Boolean(settings.footballDataApiKey);
 
   const chain: { name: string; kind: string; status: "ok" | "warn" | "off"; statusLabel: string }[] = [
     {
-      name: catalogValue === "football-data" ? "football-data.org + SofaScore" : "SofaScore",
+      name: hasFdorg ? "odds-api.io + football-data.org" : "odds-api.io",
       kind: "CATALOG",
-      status: catalogValue === "football-data" ? "ok" : "warn",
-      statusLabel: catalogValue === "football-data" ? "OK" : "SCRAPING",
+      status: settings.oddsApiIoKey ? "ok" : "off",
+      statusLabel: settings.oddsApiIoKey ? "OK" : "NO KEY",
     },
     {
       name: "odds-api.io",
@@ -97,7 +97,7 @@ export function ProvidersCard({ settings }: Props) {
         </tbody>
       </table>
       <div style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--zs-fg-muted)" }}>
-        Catalog scrapes SofaScore by default · pasting a football-data.org key promotes main leagues to the official API.
+        Fixtures come from odds-api.io · pasting a football-data.org key adds main leagues via the official API.
       </div>
     </Block>
   );

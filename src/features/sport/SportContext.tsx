@@ -22,13 +22,6 @@ function loadSportId(): string {
   }
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-}
-
 interface Ctx {
   /** The active sport (always a real, selectable entry). */
   sport: Sport;
@@ -70,22 +63,9 @@ export function SportProvider({ children }: { children: ReactNode }) {
     }
   }, [activeSportId]);
 
-  // keyboard: [ / ] cycle previous/next enabled sport (ignore when typing)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTypingTarget(e.target)) return;
-      if (e.key === "[") {
-        e.preventDefault();
-        cycle(-1);
-      } else if (e.key === "]") {
-        e.preventDefault();
-        cycle(1);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cycle]);
+  // NOTE: `[` / `]` sport cycling is intentionally NOT bound here. Sport is a
+  // Scanner-scoped concern — the Scanner owns the shortcut so cycling only
+  // fires while the Fixture Board is on screen, never from global chrome.
 
   const sport = useMemo<Sport>(
     () => findSportById(activeSportId) ?? findSportById(DEFAULT_SPORT_ID) ?? SPORTS[0],

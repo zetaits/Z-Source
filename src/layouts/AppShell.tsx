@@ -6,9 +6,6 @@ import { TutorialTour } from "@/features/help/TutorialTour";
 import { TOUR_STEPS } from "@/features/help/tourSteps";
 import { SportProvider, useSport } from "@/features/sport/SportContext";
 import { Sidebar } from "./Sidebar";
-import { SportRail } from "./SportRail";
-import { Topbar } from "./Topbar";
-import { Ticker } from "./Ticker";
 
 const ROUTE_BY_KEY: Record<string, string> = {
   "1": "/",
@@ -63,11 +60,8 @@ export function AppShell() {
             color: "var(--zs-fg)",
           }}
         >
-          <SportRail />
           <Sidebar />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <Topbar onOpenPalette={() => setPaletteOpen(true)} />
-            <Ticker />
             <ShellContent />
           </div>
           <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
