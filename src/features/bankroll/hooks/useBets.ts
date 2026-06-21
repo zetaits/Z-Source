@@ -107,8 +107,14 @@ export const useSettleBet = () => {
         )
         .catch(() => {});
       if (bet.closingPriceDecimal === undefined) {
+        // Use the play snapshot's selection when present: for player props it
+        // carries `player`, so selectionKey matches the |player-tagged odds
+        // snapshots persisted during analyze() (without it, latestFor never
+        // matches and CLV stays pending forever). Football has no player on the
+        // selection, so the key — and behaviour — is byte-identical.
+        const closingSelection = bet.playSnapshot?.selection ?? bet.selection;
         const snap = await snapshotsRepo
-          .latestFor(bet.matchId, bet.marketKey, bet.selection)
+          .latestFor(bet.matchId, bet.marketKey, closingSelection)
           .catch(() => null);
         if (snap) {
           await betsRepo.setClosingPrice(bet.id, snap.priceDecimal).catch(() => {});

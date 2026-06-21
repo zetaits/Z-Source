@@ -28,6 +28,8 @@ import { ComboPlayCard } from "@/components/domain/ComboPlayCard";
 import { ReasoningTrace } from "@/components/domain/ReasoningTrace";
 import { useMatch } from "@/features/match-detail/hooks/useMatch";
 import { useAnalysis } from "@/features/match-detail/hooks/useAnalysis";
+import { useSport } from "@/features/sport/SportContext";
+import { getSportModule } from "@/sports";
 import type { AnalysisResult } from "@/features/match-detail/hooks/useAnalysis";
 import { formatRelativeShort } from "@/lib/time";
 
@@ -50,6 +52,12 @@ export function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const { data: match, isLoading: matchLoading } = useMatch(id);
   const { data: bankroll } = useBankrollSettings();
+  const { activeSportId } = useSport();
+  // Capability flags for the active sport. The Splits/History "unavailable"
+  // banners are football-shaped warnings — a sport that DECLARES the capability
+  // absent (e.g. baseball K-props: history/splits false) suppresses them
+  // entirely, since absence is by design, not a degraded fetch.
+  const sportCaps = getSportModule(activeSportId).capabilities;
 
   const [analysisEnabled, setAnalysisEnabled] = useState(false);
   const analysis = useAnalysis(match ?? null, { enabled: analysisEnabled });
@@ -137,7 +145,7 @@ export function MatchDetail() {
             </AlertDescription>
           </Alert>
         )}
-        {analysis.data?.status === "ok" && !analysis.data.splitsAvailable && (
+        {sportCaps.splits && analysis.data?.status === "ok" && !analysis.data.splitsAvailable && (
           <Alert>
             <AlertCircle className="size-4" />
             <AlertTitle>Splits unavailable</AlertTitle>
@@ -147,7 +155,7 @@ export function MatchDetail() {
             </AlertDescription>
           </Alert>
         )}
-        {analysis.data?.status === "ok" && !analysis.data.historyAvailable && (
+        {sportCaps.history && analysis.data?.status === "ok" && !analysis.data.historyAvailable && (
           <Alert>
             <AlertCircle className="size-4" />
             <AlertTitle>History unavailable</AlertTitle>

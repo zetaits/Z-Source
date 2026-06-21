@@ -15,6 +15,7 @@ import { useBets, useOpenExposure } from "@/features/bankroll/hooks/useBets";
 import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
 import { LedgerTable } from "@/features/bankroll/components/LedgerTable";
 import { BetsTable } from "@/features/bankroll/components/BetsTable";
+import { ClvSummaryCard } from "@/features/bankroll/components/ClvSummaryCard";
 import { AdjustBankrollDialog } from "@/features/bankroll/components/AdjustBankrollDialog";
 import { BankrollSettingsDialog } from "@/features/bankroll/components/BankrollSettingsDialog";
 import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
@@ -148,6 +149,10 @@ export function Bankroll() {
               </div>
             )}
           </Block>
+
+          <div style={{ marginBottom: 22 }}>
+            <ClvSummaryCard bets={bets.data ?? []} />
+          </div>
 
           <Tabs defaultValue="bets">
             <TabsList>

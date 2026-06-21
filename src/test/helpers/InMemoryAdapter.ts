@@ -16,6 +16,17 @@ interface BetRow {
   stake_minor: number;
 }
 
+interface SnapshotRow {
+  id: number;
+  match_id: string;
+  market_key: string;
+  selection_key: string;
+  price_decimal: number;
+  book: string;
+  taken_at: string;
+  is_opener: number;
+}
+
 const normalize = (sql: string): string => sql.replace(/\s+/g, " ").trim().toUpperCase();
 
 /**
@@ -29,7 +40,9 @@ export class InMemoryAdapter implements StorageAdapter {
   private settings = new Map<string, string>();
   private ledger: LedgerRow[] = [];
   private bets: BetRow[] = [];
+  private snapshots: SnapshotRow[] = [];
   private nextLedgerId = 1;
+  private nextSnapshotId = 1;
 
   async init(): Promise<void> {}
 
@@ -67,6 +80,50 @@ export class InMemoryAdapter implements StorageAdapter {
       return [...this.ledger].reverse().slice(0, limit) as unknown as T[];
     }
 
+    // odds_snapshots: latestFor — most specific, must come first.
+    // SELECT * ... WHERE match_id = ? AND market_key = ? AND selection_key = ? AND is_opener = 0 ORDER BY taken_at DESC LIMIT 1
+    if (s.startsWith("SELECT * FROM ODDS_SNAPSHOTS") && s.includes("SELECTION_KEY") && s.includes("IS_OPENER = 0")) {
+      const matchId = params[0] as string;
+      const marketKey = params[1] as string;
+      const selKey = params[2] as string;
+      const filtered = this.snapshots
+        .filter(
+          (r) =>
+            r.match_id === matchId &&
+            r.market_key === marketKey &&
+            r.selection_key === selKey &&
+            r.is_opener === 0,
+        )
+        .sort((a, b) => b.taken_at.localeCompare(a.taken_at));
+      return (filtered.length > 0 ? [filtered[0]] : []) as T[];
+    }
+
+    // odds_snapshots: SELECT COUNT(*) as c ... WHERE match_id = ? AND is_opener = 1
+    if (s.includes("COUNT(*)") && s.includes("ODDS_SNAPSHOTS") && s.includes("IS_OPENER")) {
+      const matchId = params[0] as string;
+      const c = this.snapshots.filter(
+        (r) => r.match_id === matchId && r.is_opener === 1,
+      ).length;
+      return [{ c }] as T[];
+    }
+
+    // odds_snapshots: SELECT * ... WHERE match_id = ? AND market_key = ? ORDER BY taken_at ASC
+    if (s.startsWith("SELECT * FROM ODDS_SNAPSHOTS") && s.includes("MARKET_KEY")) {
+      const matchId = params[0] as string;
+      const marketKey = params[1] as string;
+      return this.snapshots
+        .filter((r) => r.match_id === matchId && r.market_key === marketKey)
+        .sort((a, b) => a.taken_at.localeCompare(b.taken_at)) as unknown as T[];
+    }
+
+    // odds_snapshots: SELECT * ... WHERE match_id = ? ORDER BY taken_at ASC
+    if (s.startsWith("SELECT * FROM ODDS_SNAPSHOTS") && s.includes("MATCH_ID")) {
+      const matchId = params[0] as string;
+      return this.snapshots
+        .filter((r) => r.match_id === matchId)
+        .sort((a, b) => a.taken_at.localeCompare(b.taken_at)) as unknown as T[];
+    }
+
     throw new Error(`InMemoryAdapter: unsupported SELECT — ${sql}`);
   }
 
@@ -100,6 +157,23 @@ export class InMemoryAdapter implements StorageAdapter {
         balance_after_minor,
         bet_id,
         note,
+      });
+      return { rowsAffected: 1, lastInsertId: id };
+    }
+
+    if (s.startsWith("INSERT INTO ODDS_SNAPSHOTS")) {
+      const [match_id, market_key, selection_key, price_decimal, book, taken_at, is_opener] =
+        params as [string, string, string, number, string, string, number];
+      const id = this.nextSnapshotId++;
+      this.snapshots.push({
+        id,
+        match_id,
+        market_key,
+        selection_key,
+        price_decimal,
+        book,
+        taken_at,
+        is_opener,
       });
       return { rowsAffected: 1, lastInsertId: id };
     }

@@ -11,11 +11,16 @@ import { BookId, MatchId, PlayId } from "@/domain/ids";
 import type { BatterKSplits, Handedness, LineupSlot } from "@/domain/baseball";
 import type { ReasoningEntry } from "@/domain/trace";
 import type { PlayCandidate, Verdict } from "@/domain/play";
+import type { StakePolicy } from "@/domain/strategy";
 import type { AnalysisDiagnostics } from "@/engine";
+import { DEFAULT_UNIT_BANKROLL_FRACTION } from "@/engine";
+import { sizeStakeUnits } from "@/engine/stake";
 import { resolveProviders } from "@/services/providers/factory";
 import { createMatchResolver } from "@/services/resolver/MatchResolver";
 import { jaroWinkler } from "@/services/resolver/teamNameNormalizer";
 import { settingsStore } from "@/services/settings/settingsStore";
+import { snapshotsRepo } from "@/storage/repos/snapshotsRepo";
+import { isPersistentStorage } from "@/storage";
 import { loadStrategy } from "@/features/match-detail/hooks/loadStrategy";
 import type { AnalysisResult, AnalyzeArgs, ResolutionInfo } from "@/sports/contracts";
 import {
@@ -44,6 +49,22 @@ const MIN_CONFIDENCE = 0.45; // model confidence floor
 const LEG_TIMEOUT_MS = 35_000;
 const GAMELOG_N = 10;
 const NAME_FUZZY_FLOOR = 0.85;
+
+// v1 staking is FLAT and pinned here, independent of the DB strategy default
+// (which is FRACTIONAL_KELLY) — until CLV validates the K-model, uniform 1u
+// keeps the beat-close sample clean of sizing variance. To switch to ¼-Kelly
+// once enough plays are logged, flip `kind` to "FRACTIONAL_KELLY" (or pass
+// `strategy.stakePolicy` straight through): sizeStakeUnits is already
+// polymorphic on policy.kind, so analyze() itself never changes.
+const FLAT_BASEBALL_POLICY: StakePolicy = {
+  kind: "FLAT",
+  kellyFraction: 0.25,
+  maxUnitsPerPlay: 2,
+  flatUnits: 1,
+  minEdgePct: EV_THRESHOLD,
+  minConfidence: MIN_CONFIDENCE,
+  unbondedFactor: 1,
+};
 
 const currentSeason = () => new Date().getFullYear();
 
@@ -110,9 +131,10 @@ const analyzePitcher = async (args: {
   oddsEventId: string;
   eventProps: EventPitcherProps;
   generatedAt: string;
+  stakePolicy: StakePolicy;
   signal?: AbortSignal;
 }): Promise<PitcherPlays> => {
-  const { probable, oppLineupRaw, season, oddsEventId, eventProps, generatedAt, signal } = args;
+  const { probable, oppLineupRaw, season, oddsEventId, eventProps, generatedAt, stakePolicy, signal } = args;
   const empty: PitcherPlays = { candidates: [], projected: false, propsMatched: false };
 
   const pitcher = await withTimeout(
@@ -239,7 +261,18 @@ const analyzePitcher = async (args: {
         edgePct: ev,
         fairProb: fair,
         confidence: proj.confidence,
-        stakeUnits: 0, // v1: no Kelly sizing yet
+        // Stake via the shared stake-policy seam (engine/stake.ts). v1 pins a
+        // FLAT policy; PASS candidates (near-misses) get 0u. Swapping to
+        // ¼-Kelly later is a policy flip, not an analyze() change.
+        stakeUnits: passes
+          ? sizeStakeUnits({
+              policy: stakePolicy,
+              fairProb: fair,
+              priceDecimal: dec,
+              confidence: proj.confidence,
+              unitBankrollFraction: DEFAULT_UNIT_BANKROLL_FRACTION,
+            })
+          : 0,
         verdict,
         trace,
         generatedAt,
@@ -359,6 +392,7 @@ export const analyzeBaseball = async (args: AnalyzeArgs): Promise<AnalysisResult
         oddsEventId,
         eventProps,
         generatedAt,
+        stakePolicy: FLAT_BASEBALL_POLICY,
         signal: parentSignal,
       }),
     ),
@@ -366,6 +400,34 @@ export const analyzeBaseball = async (args: AnalyzeArgs): Promise<AnalysisResult
 
   const allCandidates = pitcherResults.flatMap((r) => r.candidates);
   const plays = allCandidates.filter((c) => c.verdict !== "PASS");
+
+  // Persist the Bet365 Ks offers so the bet-log's lazy closing-capture
+  // (useSettleBet -> snapshotsRepo.latestFor) has a "closing" line to find when
+  // the user settles a logged prop. "Closing" = the latest snapshot before
+  // settle, so re-running analysis near first pitch tightens it. Record every
+  // candidate incl. PASS — a near-miss line may still be bet manually, and the
+  // rows are cheap. Guard on persistent storage (no-op on web/tests) and never
+  // throw: a snapshot failure must not break analysis (graceful degradation —
+  // missing snapshot just leaves CLV pending).
+  if (isPersistentStorage() && allCandidates.length > 0) {
+    try {
+      await Promise.all(
+        allCandidates.map((c) =>
+          snapshotsRepo.recordOffer({
+            matchId: MatchId(oddsEventId),
+            marketKey: "PITCHER_KS",
+            selection: c.selection,
+            priceDecimal: c.price.decimal,
+            book: BookId("Bet365"),
+            takenAt: generatedAt,
+            isOpener: false,
+          }),
+        ),
+      );
+    } catch {
+      /* snapshot persistence is best-effort; CLV simply stays pending */
+    }
+  }
 
   const diagnostics: AnalysisDiagnostics = {
     selectionsEnumerated: allCandidates.length,
