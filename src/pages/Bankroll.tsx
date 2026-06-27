@@ -16,6 +16,7 @@ import { useEquityCurve } from "@/features/bankroll/hooks/useEquityCurve";
 import { LedgerTable } from "@/features/bankroll/components/LedgerTable";
 import { BetsTable } from "@/features/bankroll/components/BetsTable";
 import { ClvSummaryCard } from "@/features/bankroll/components/ClvSummaryCard";
+import { AutopilotPanel } from "@/features/autopilot/AutopilotPanel";
 import { AdjustBankrollDialog } from "@/features/bankroll/components/AdjustBankrollDialog";
 import { BankrollSettingsDialog } from "@/features/bankroll/components/BankrollSettingsDialog";
 import { BetEntryDialog } from "@/features/bankroll/components/BetEntryDialog";
@@ -152,6 +153,10 @@ export function Bankroll() {
 
           <div style={{ marginBottom: 22 }}>
             <ClvSummaryCard bets={bets.data ?? []} />
+          </div>
+
+          <div style={{ marginBottom: 22 }}>
+            <AutopilotPanel />
           </div>
 
           <Tabs defaultValue="bets">

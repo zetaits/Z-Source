@@ -22,6 +22,8 @@ export interface Bet {
   notes?: string;
   playId?: PlayId;
   playSnapshot?: PlayCandidate;
+  /** Realised numeric outcome (e.g. pitcher's actual strikeouts). For calibration. */
+  actualResult?: number;
 }
 
 export const profitMinor = (b: Bet): number => {

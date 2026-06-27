@@ -14,7 +14,7 @@ function App() {
         <TweaksProvider>
           <TooltipProvider delayDuration={150}>
             <RouterProvider router={router} />
-            <Toaster />
+            <Toaster position="bottom-center" />
           </TooltipProvider>
         </TweaksProvider>
       </QueryClientProvider>

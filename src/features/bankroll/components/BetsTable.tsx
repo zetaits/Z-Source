@@ -141,10 +141,17 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
                       ? "text-destructive"
                       : "text-muted-foreground";
               const market = marketByKey(b.marketKey);
-              const sideLabel =
+              const sideText =
                 b.selection.line !== undefined
                   ? `${b.selection.side} ${b.selection.line}`
                   : b.selection.side;
+              // Player props (e.g. pitcher Ks) lead with the player so the row
+              // reads "Chase Burns · under 7.5" instead of a bare "under 7.5".
+              const sideLabel = b.selection.player
+                ? `${b.selection.player} · ${sideText}`
+                : sideText;
+              const marketLabel =
+                market?.label ?? b.selection.propLabel ?? b.marketKey;
               return (
                 <TableRow key={b.id}>
                   <TableCell className="font-mono text-xs text-muted-foreground">
@@ -153,7 +160,7 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
                   <TableCell>
                     <div className="text-sm font-medium capitalize">{sideLabel}</div>
                     <div className="text-xs text-muted-foreground">
-                      {market?.label ?? b.marketKey} · {b.book}
+                      {marketLabel} · {b.book}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
@@ -179,7 +186,14 @@ export function BetsTable({ bets, bankroll, pageSize = DEFAULT_PAGE_SIZE }: Prop
                     {(() => {
                       const clv = clvPct(b);
                       if (clv === null) {
-                        return <span className="text-muted-foreground">—</span>;
+                        return (
+                          <span
+                            className="text-muted-foreground"
+                            title="No closing line captured (app was closed during the close window). Not a 0% — simply unmeasured."
+                          >
+                            N/A
+                          </span>
+                        );
                       }
                       const tone =
                         clv > 0

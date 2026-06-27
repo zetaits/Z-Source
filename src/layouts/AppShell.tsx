@@ -5,6 +5,7 @@ import { TutorialProvider } from "@/features/help/TutorialContext";
 import { TutorialTour } from "@/features/help/TutorialTour";
 import { TOUR_STEPS } from "@/features/help/tourSteps";
 import { SportProvider, useSport } from "@/features/sport/SportContext";
+import { AutopilotProvider } from "@/features/autopilot/AutopilotContext";
 import { Sidebar } from "./Sidebar";
 
 const ROUTE_BY_KEY: Record<string, string> = {
@@ -50,6 +51,7 @@ export function AppShell() {
   return (
     <TutorialProvider totalSteps={TOUR_STEPS.length}>
       <SportProvider>
+        <AutopilotProvider>
         <div
           style={{
             display: "flex",
@@ -67,6 +69,7 @@ export function AppShell() {
           <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
           <TutorialTour />
         </div>
+        </AutopilotProvider>
       </SportProvider>
     </TutorialProvider>
   );

@@ -45,6 +45,12 @@ pub fn run() {
             sql: include_str!("../../../src/storage/migrations/007_drop_historical_odds.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "bets.actual_result for calibration",
+            sql: include_str!("../../../src/storage/migrations/008_bet_actual_result.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

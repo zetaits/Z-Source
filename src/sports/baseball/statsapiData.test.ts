@@ -7,7 +7,35 @@ import {
   _mapGameLogs,
   _mapPlayerHands,
   _mapBatterKSplits,
+  mapLineupStatusWindow,
 } from "./statsapiData";
+
+describe("mapLineupStatusWindow", () => {
+  it("maps gamePk -> lineups-posted across the window", () => {
+    const raw = {
+      dates: [
+        {
+          games: [
+            { gamePk: 1, lineups: { homePlayers: [{ id: 9 }], awayPlayers: [] } },
+            { gamePk: 2, lineups: { homePlayers: [], awayPlayers: [] } },
+            { gamePk: 3 }, // no lineups key yet
+            { gamePk: 4, lineups: { awayPlayers: [{ id: 5 }] } }, // away-only counts
+          ],
+        },
+      ],
+    };
+    const m = mapLineupStatusWindow(raw);
+    expect(m.get("1")).toBe(true);
+    expect(m.get("2")).toBe(false);
+    expect(m.get("3")).toBe(false);
+    expect(m.get("4")).toBe(true);
+  });
+
+  it("returns an empty map on a malformed payload (no throw)", () => {
+    expect(mapLineupStatusWindow({ nope: true }).size).toBe(0);
+    expect(mapLineupStatusWindow(null).size).toBe(0);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // _pickCombinedSplit

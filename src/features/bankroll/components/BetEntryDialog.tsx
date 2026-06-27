@@ -48,6 +48,10 @@ export interface BetEntryPrefill {
   book?: string;
   stakeUnits?: number;
   notes?: string;
+  /** Player-prop subject (e.g. pitcher name) — present for player props only. */
+  player?: string;
+  /** Human prop label (e.g. "Strikeouts O/U") — display only. */
+  propLabel?: string;
   playSnapshot?: PlayCandidate;
 }
 
@@ -76,6 +80,8 @@ const initialFromPrefill = (prefill: BetEntryPrefill | undefined, editing: Bet |
         book: editing.book,
         stakeUnits: editing.stakeUnits,
         notes: editing.notes,
+        player: editing.selection.player,
+        propLabel: editing.selection.propLabel,
       }
     : (prefill ?? {});
   return {
@@ -88,6 +94,8 @@ const initialFromPrefill = (prefill: BetEntryPrefill | undefined, editing: Bet |
     book: source.book ?? "",
     stakeUnits: source.stakeUnits ? String(source.stakeUnits) : "1",
     notes: source.notes ?? "",
+    player: source.player ?? "",
+    propLabel: source.propLabel ?? "",
   };
 };
 
@@ -101,6 +109,10 @@ export function BetEntryDialog({ open, onOpenChange, prefill, bankroll, editing 
   }, [open, prefill, editing]);
 
   const sidesCfg = sidesFor(values.marketKey);
+  // Player props (e.g. baseball pitcher Ks) come prefilled from a play — market,
+  // side and line are fixed. Show a read-only summary instead of the football
+  // market dropdown / raw ID fields; only odds/book/stake/notes stay editable.
+  const isProp = Boolean(values.player);
   const stakePreviewMinor = useMemo(() => {
     const u = Number(values.stakeUnits);
     return Number.isFinite(u) && u > 0 ? Math.round(u * bankroll.unitValueMinor) : 0;
@@ -135,6 +147,10 @@ export function BetEntryDialog({ open, onOpenChange, prefill, bankroll, editing 
       marketKey: v.marketKey as MarketKey,
       side: v.side,
       line: v.line ? Number(v.line) : undefined,
+      // Carry the player-prop subject onto the bet record so it's self-describing
+      // and so its selectionKey matches the |player-tagged odds snapshots (CLV).
+      ...(values.player ? { player: values.player } : {}),
+      ...(values.propLabel ? { propLabel: values.propLabel } : {}),
     };
 
     try {
@@ -192,75 +208,95 @@ export function BetEntryDialog({ open, onOpenChange, prefill, bankroll, editing 
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5">
-          <Section title="Match">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Match ID" htmlFor="match">
-                <Input
-                  id="match"
-                  value={values.matchId}
-                  onChange={(e) => set("matchId", e.target.value)}
-                  placeholder="sofascore:12345"
-                  required
-                />
-              </Field>
-              <Field label="League ID" htmlFor="league">
-                <Input
-                  id="league"
-                  value={values.leagueId}
-                  onChange={(e) => set("leagueId", e.target.value)}
-                  required
-                />
-              </Field>
-            </div>
-          </Section>
+          {isProp ? (
+            <Section title="Selection">
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="text-base font-semibold capitalize">{values.player}</div>
+                <div className="mt-1 font-mono text-sm">
+                  <span className="capitalize">{values.side}</span>{" "}
+                  {values.line && <span className="tabular-nums">{values.line}</span>}{" "}
+                  <span className="text-muted-foreground">
+                    · {values.propLabel || values.marketKey}
+                  </span>
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  {values.leagueId?.toUpperCase()} · event {values.matchId}
+                </div>
+              </div>
+            </Section>
+          ) : (
+            <>
+              <Section title="Match">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Match ID" htmlFor="match">
+                    <Input
+                      id="match"
+                      value={values.matchId}
+                      onChange={(e) => set("matchId", e.target.value)}
+                      placeholder="sofascore:12345"
+                      required
+                    />
+                  </Field>
+                  <Field label="League ID" htmlFor="league">
+                    <Input
+                      id="league"
+                      value={values.leagueId}
+                      onChange={(e) => set("leagueId", e.target.value)}
+                      required
+                    />
+                  </Field>
+                </div>
+              </Section>
 
-          <Section title="Selection">
-            <Field label="Market">
-              <Select value={values.marketKey} onValueChange={(v) => onMarketChange(v as MarketKey)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MARKETS.map((m) => (
-                    <SelectItem key={m.key} value={m.key}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <div className={`grid gap-3 ${sidesCfg.hasLine ? "grid-cols-[1fr_120px]" : "grid-cols-1"}`}>
-              <Field label="Side">
-                <ToggleGroup
-                  type="single"
-                  value={values.side}
-                  onValueChange={(v) => v && set("side", v)}
-                  variant="outline"
-                  className="justify-start"
-                >
-                  {sidesCfg.sides.map((s) => (
-                    <ToggleGroupItem key={s.value} value={s.value} className="px-4">
-                      {s.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </Field>
-              {sidesCfg.hasLine && (
-                <Field label="Line" htmlFor="line" hint={sidesCfg.lineHint}>
-                  <Input
-                    id="line"
-                    type="number"
-                    step="0.25"
-                    value={values.line}
-                    onChange={(e) => set("line", e.target.value)}
-                    className="font-mono tabular-nums"
-                    required
-                  />
+              <Section title="Selection">
+                <Field label="Market">
+                  <Select value={values.marketKey} onValueChange={(v) => onMarketChange(v as MarketKey)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MARKETS.map((m) => (
+                        <SelectItem key={m.key} value={m.key}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
-              )}
-            </div>
-          </Section>
+
+                <div className={`grid gap-3 ${sidesCfg.hasLine ? "grid-cols-[1fr_120px]" : "grid-cols-1"}`}>
+                  <Field label="Side">
+                    <ToggleGroup
+                      type="single"
+                      value={values.side}
+                      onValueChange={(v) => v && set("side", v)}
+                      variant="outline"
+                      className="justify-start"
+                    >
+                      {sidesCfg.sides.map((s) => (
+                        <ToggleGroupItem key={s.value} value={s.value} className="px-4">
+                          {s.label}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                  {sidesCfg.hasLine && (
+                    <Field label="Line" htmlFor="line" hint={sidesCfg.lineHint}>
+                      <Input
+                        id="line"
+                        type="number"
+                        step="0.25"
+                        value={values.line}
+                        onChange={(e) => set("line", e.target.value)}
+                        className="font-mono tabular-nums"
+                        required
+                      />
+                    </Field>
+                  )}
+                </div>
+              </Section>
+            </>
+          )}
 
           <Section title="Pricing & sizing">
             <div className="grid grid-cols-3 gap-3">

@@ -129,12 +129,14 @@ const analyzePitcher = async (args: {
   oppLineupRaw: LineupSlot[];
   season: number;
   oddsEventId: string;
+  gamePk: number;
+  date: string;
   eventProps: EventPitcherProps;
   generatedAt: string;
   stakePolicy: StakePolicy;
   signal?: AbortSignal;
 }): Promise<PitcherPlays> => {
-  const { probable, oppLineupRaw, season, oddsEventId, eventProps, generatedAt, stakePolicy, signal } = args;
+  const { probable, oppLineupRaw, season, oddsEventId, gamePk, date, eventProps, generatedAt, stakePolicy, signal } = args;
   const empty: PitcherPlays = { candidates: [], projected: false, propsMatched: false };
 
   const pitcher = await withTimeout(
@@ -256,6 +258,9 @@ const analyzePitcher = async (args: {
           propLabel: "Strikeouts O/U",
         },
         price: { decimal: dec, book: BookId("Bet365"), takenAt: generatedAt },
+        // Native statsapi ids so the autopilot can auto-settle from the box score
+        // (matchId is the odds-api event id, which can't address the box score).
+        settleRef: { gamePk, playerId: probable.playerId, date },
         // Fraction (e.g. 0.05), matching football's PlayCandidate.edgePct — the
         // UI (formatPct, EnginePlayground) multiplies by 100. Do NOT pre-scale.
         edgePct: ev,
@@ -390,6 +395,8 @@ export const analyzeBaseball = async (args: AnalyzeArgs): Promise<AnalysisResult
         oppLineupRaw: p.teamSide === "home" ? lineup.away : lineup.home,
         season,
         oddsEventId,
+        gamePk,
+        date,
         eventProps,
         generatedAt,
         stakePolicy: FLAT_BASEBALL_POLICY,

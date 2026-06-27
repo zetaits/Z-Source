@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -15,6 +16,7 @@ import { useSport } from "@/features/sport/SportContext";
 import { SportGlyph } from "@/features/sport/SportGlyph";
 import { localDayKey } from "@/services/catalog/windowFixtures";
 import { formatRelativeShort } from "@/lib/time";
+import { useMlbLineupStatus } from "@/features/fixtures/useMlbLineupStatus";
 
 // ---------------------------------------------------------------------------
 // Pre-analysis signal seam. Picks/verdicts only exist AFTER analysis, so the
@@ -97,6 +99,7 @@ export function Scanner() {
   const { data: settings } = useSettings();
   const { sport, activeSportId, setSport, cycle } = useSport();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const hasFeed = SPORTS_WITH_FEED.has(sport.id);
   const fixtures = useFixturesWindow();
   const { filters, apply, update } = useScannerFilters();
@@ -186,7 +189,12 @@ export function Scanner() {
           <>
             <button
               className="zs-btn ghost"
-              onClick={() => void fixtures.refetch()}
+              onClick={() => {
+                void fixtures.refetch();
+                if (sport.id === "baseball") {
+                  void queryClient.invalidateQueries({ queryKey: ["mlb", "lineup-status"] });
+                }
+              }}
               disabled={fixtures.isFetching}
             >
               ⟲ {fixtures.isFetching ? "REFRESHING…" : "REFRESH"}
@@ -750,6 +758,9 @@ function LeagueBlock({ group, sport, max }: { group: LeagueGroup; sport: Sport; 
   const tLast = new Date(last.kickoffAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const range = group.matches.length > 1 ? `${tFirst}–${tLast}` : tFirst;
 
+  // Baseball only: gamePk -> lineups posted? Drives the per-row readiness badge.
+  const lineupStatus = useMlbLineupStatus(sport.id === "baseball");
+
   return (
     <Block
       head={
@@ -814,6 +825,26 @@ function LeagueBlock({ group, sport, max }: { group: LeagueGroup; sport: Sport; 
               >
                 {m.status === "LIVE" ? "LIVE NOW" : settled ? "FINAL" : `IN ${formatRelativeShort(m.kickoffAt).toUpperCase()}`}
               </div>
+              {sport.id === "baseball" && !settled && m.status !== "LIVE" && (
+                <div
+                  title={
+                    lineupStatus?.get(m.catalogId)
+                      ? "Lineups posted — analyse now (model runs at full confidence)"
+                      : "Lineups not posted yet — wait ~2-3h before first pitch; pre-lineup the model emits no plays"
+                  }
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: "0.06em",
+                    marginTop: 3,
+                    fontWeight: 700,
+                    color: lineupStatus?.get(m.catalogId)
+                      ? "var(--zs-pos)"
+                      : "var(--zs-fg-faint)",
+                  }}
+                >
+                  {lineupStatus?.get(m.catalogId) ? "▸ READY" : "⏳ LINEUPS PENDING"}
+                </div>
+              )}
             </div>
             {/* matchup w/ code badges */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>

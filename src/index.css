@@ -341,6 +341,11 @@ body.density-loose   { --row-h: 36px; --pad: 22px; --pad-tight: 14px; font-size:
     border-bottom: 1px solid var(--zs-border);
     background: var(--zs-bg);
   }
+  /* `.zs-table th` (0,1,1) outranks the `text-right` utility (0,1,0), which
+     left-aligned numeric headers (Odds/Stake/P/L/CLV) over right-aligned cells.
+     These overrides let the alignment utilities win on header cells. */
+  .zs-table th.text-right { text-align: right; }
+  .zs-table th.text-center { text-align: center; }
   .zs-table td {
     padding: 10px 14px;
     border-bottom: 1px solid var(--zs-rule);

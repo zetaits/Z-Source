@@ -20,6 +20,7 @@ import type {
   ProbablePitcher,
 } from "@/domain/baseball";
 import { httpRequest } from "@/services/http/httpClient";
+import { buildWindowRange, localDayKey } from "@/services/catalog/windowFixtures";
 
 const STATSAPI_BASE = "https://statsapi.mlb.com/api/v1";
 const STATSAPI_RPS = 2; // free + generous
@@ -247,6 +248,48 @@ export const getLineup = async (
   } catch (err) {
     console.warn("[mlb-statsapi] lineup fetch failed", err);
     return { gamePk, home: [], away: [], confirmed: false };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Window-wide lineup readiness — gamePk -> "lineups posted?" for every game in
+// the upcoming window, in ONE schedule call. Drives the Scanner "READY vs
+// LINEUPS PENDING" badge so the user knows which games are worth analysing
+// (pre-lineup the model can't bet — it runs at low confidence and emits no play).
+// A game counts as "out" when EITHER side's batting order is posted.
+// ---------------------------------------------------------------------------
+export const mapLineupStatusWindow = (raw: unknown): Map<string, boolean> => {
+  const out = new Map<string, boolean>();
+  const parsed = lineupScheduleSchema.safeParse(raw);
+  if (!parsed.success) {
+    console.warn("[mlb-statsapi] lineup-status parse failed", parsed.error.issues.slice(0, 3));
+    return out;
+  }
+  for (const date of parsed.data.dates ?? []) {
+    for (const g of date.games ?? []) {
+      if (g.gamePk == null) continue;
+      const home = g.lineups?.homePlayers?.length ?? 0;
+      const away = g.lineups?.awayPlayers?.length ?? 0;
+      out.set(String(g.gamePk), home > 0 || away > 0);
+    }
+  }
+  return out;
+};
+
+/** gamePk -> lineups-posted for the whole upcoming window (one schedule call). */
+export const fetchMlbLineupStatus = async (
+  signal?: AbortSignal,
+): Promise<Map<string, boolean>> => {
+  const { from, to } = buildWindowRange();
+  const url =
+    `${STATSAPI_BASE}/schedule?sportId=1` +
+    `&startDate=${localDayKey(from)}&endDate=${localDayKey(to)}&hydrate=lineups`;
+  try {
+    const res = await httpRequest({ url, rps: STATSAPI_RPS, headers: ACCEPT_JSON, signal });
+    return mapLineupStatusWindow(await res.json());
+  } catch (err) {
+    console.warn("[mlb-statsapi] lineup-status fetch failed", err);
+    return new Map();
   }
 };
 

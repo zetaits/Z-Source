@@ -22,6 +22,7 @@ interface BetRow {
   closing_price_decimal: number | null;
   notes: string | null;
   play_snapshot_json: string | null;
+  actual_result: number | null;
 }
 
 const rowToBet = (r: BetRow): Bet => ({
@@ -43,6 +44,7 @@ const rowToBet = (r: BetRow): Bet => ({
   playSnapshot: r.play_snapshot_json
     ? safeJsonParse<PlayCandidate>(r.play_snapshot_json, `bets.play_snapshot_json (id=${r.id})`)
     : undefined,
+  actualResult: r.actual_result ?? undefined,
 });
 
 export const betsRepo = {
@@ -111,6 +113,14 @@ export const betsRepo = {
     await db.execute(
       "UPDATE bets SET closing_price_decimal = ? WHERE id = ?",
       [priceDecimal, id],
+    );
+  },
+
+  async setActualResult(id: BetId, value: number): Promise<void> {
+    const db = await getStorage();
+    await db.execute(
+      "UPDATE bets SET actual_result = ? WHERE id = ?",
+      [value, id],
     );
   },
 

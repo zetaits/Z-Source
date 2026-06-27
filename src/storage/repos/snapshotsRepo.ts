@@ -88,12 +88,23 @@ export const snapshotsRepo = {
     matchId: MatchId,
     marketKey: MarketKey,
     selection: Selection,
+    opts: { after?: string } = {},
   ): Promise<SnapshotRow | null> {
     const db = await getStorage();
-    const rows = await db.select<DbRow>(
-      "SELECT * FROM odds_snapshots WHERE match_id = ? AND market_key = ? AND selection_key = ? AND is_opener = 0 ORDER BY taken_at DESC LIMIT 1",
-      [matchId, marketKey, selectionKey(selection)],
-    );
+    // `after` restricts to snapshots taken strictly later than the given time —
+    // used by settle to count only a GENUINE closing observation (one captured
+    // after the bet was placed), not the entry snapshot echoed back. Without a
+    // later snapshot the caller leaves the closing price unset → CLV reads N/A,
+    // distinguishing "never captured" from a real "line didn't move" (0%).
+    const rows = opts.after
+      ? await db.select<DbRow>(
+          "SELECT * FROM odds_snapshots WHERE match_id = ? AND market_key = ? AND selection_key = ? AND is_opener = 0 AND taken_at > ? ORDER BY taken_at DESC LIMIT 1",
+          [matchId, marketKey, selectionKey(selection), opts.after],
+        )
+      : await db.select<DbRow>(
+          "SELECT * FROM odds_snapshots WHERE match_id = ? AND market_key = ? AND selection_key = ? AND is_opener = 0 ORDER BY taken_at DESC LIMIT 1",
+          [matchId, marketKey, selectionKey(selection)],
+        );
     return rows[0] ? rowToSnap(rows[0]) : null;
   },
 };

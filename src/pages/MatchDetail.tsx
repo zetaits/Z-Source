@@ -42,6 +42,8 @@ const toPrefill = (play: PlayCandidate, leagueId: string): BetEntryPrefill => ({
   marketKey: play.selection.marketKey,
   side: play.selection.side,
   line: play.selection.line,
+  player: play.selection.player,
+  propLabel: play.selection.propLabel,
   priceDecimal: play.price.decimal,
   book: String(play.price.book),
   stakeUnits: play.stakeUnits,
@@ -323,18 +325,22 @@ function MatchHeaderPit({
         to="/scanner"
         style={{
           background: "transparent",
-          border: "none",
+          border: "1px solid var(--zs-border)",
           color: "var(--zs-fg-muted)",
           fontFamily: "var(--font-mono)",
-          fontSize: 10,
+          fontSize: 11,
           letterSpacing: "0.12em",
           cursor: "pointer",
           textDecoration: "none",
-          display: "inline-block",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 14px",
           marginBottom: 12,
         }}
       >
-        ← SCANNER / FIXTURE BOARD
+        <span style={{ fontSize: 20, lineHeight: 1 }} aria-hidden>←</span>
+        SCANNER / FIXTURE BOARD
       </Link>
       <div className="zs-block" style={{ padding: 0 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "stretch" }}>

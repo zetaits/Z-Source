@@ -58,6 +58,12 @@ export const MARKET_SIDES: Record<MarketKey, MarketSidesConfig> = {
   SAVES_GK: { sides: OVER_UNDER, hasLine: true, lineHint: "GK line, e.g. 3.5" },
   TACKLES_TOTAL: { sides: OVER_UNDER, hasLine: true, lineHint: "20.5, 22.5…" },
   THROWINS_OU: { sides: OVER_UNDER, hasLine: true, lineHint: "30.5, 35.5…" },
+  PITCHER_KS: { sides: OVER_UNDER, hasLine: true, lineHint: "4.5, 5.5, 6.5…" },
 };
 
-export const sidesFor = (key: MarketKey): MarketSidesConfig => MARKET_SIDES[key];
+// Fallback to a generic Over/Under config so an unmapped market never crashes
+// the bet dialog (sidesFor used to return undefined → ".hasLine of undefined").
+const FALLBACK_SIDES: MarketSidesConfig = { sides: OVER_UNDER, hasLine: true };
+
+export const sidesFor = (key: MarketKey): MarketSidesConfig =>
+  MARKET_SIDES[key] ?? FALLBACK_SIDES;

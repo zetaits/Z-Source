@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,6 +11,7 @@ import {
   Settings as SettingsIcon,
   Target,
   Wallet,
+  Zap,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -27,6 +29,9 @@ import type { RuleConfig } from "@/domain/strategy";
 import { useStrategy } from "@/features/strategy/hooks/useStrategy";
 import { isPersistentStorage } from "@/storage";
 import { matchesCacheRepo } from "@/storage/repos/matchesCacheRepo";
+import { useSport } from "@/features/sport/SportContext";
+import { MLB_SPORT_ID } from "./mlbBatchAnalysis";
+import { MlbBatchDialog } from "./MlbBatchDialog";
 
 interface Props {
   open: boolean;
@@ -37,6 +42,8 @@ export function CommandPalette({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const persistent = isPersistentStorage();
   const { strategy, setRuleConfig } = useStrategy();
+  const { activeSportId } = useSport();
+  const [mlbBatchOpen, setMlbBatchOpen] = useState(false);
 
   const upcoming = useQuery({
     queryKey: ["palette", "upcoming-matches"],
@@ -55,6 +62,7 @@ export function CommandPalette({ open, onOpenChange }: Props) {
   );
 
   return (
+    <>
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput placeholder="Jump, log, toggle… try “liverpool” or “draw-value”" />
       <CommandList>
@@ -94,6 +102,19 @@ export function CommandPalette({ open, onOpenChange }: Props) {
             <CirclePlay className="mr-2 size-4" />
             Log a bet
           </CommandItem>
+          {activeSportId === MLB_SPORT_ID && (
+            <CommandItem
+              disabled={!persistent}
+              value="analyze mlb games lineups batch"
+              onSelect={() => {
+                onOpenChange(false);
+                setMlbBatchOpen(true);
+              }}
+            >
+              <Zap className="mr-2 size-4" />
+              Analyze MLB games with lineups
+            </CommandItem>
+          )}
         </CommandGroup>
 
         {persistent && (upcoming.data?.length ?? 0) > 0 && (
@@ -163,5 +184,7 @@ export function CommandPalette({ open, onOpenChange }: Props) {
         </CommandGroup>
       </CommandList>
     </CommandDialog>
+    <MlbBatchDialog open={mlbBatchOpen} onOpenChange={setMlbBatchOpen} />
+    </>
   );
 }
