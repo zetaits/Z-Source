@@ -26,6 +26,7 @@ import {
   type EventPitcherProps,
 } from "@/sports/baseball/oddsProps";
 import { getGameTiming, getPitcherFinalKs } from "@/sports/baseball/gameResult";
+import { BASEBALL_KS_BOOK } from "@/sports/baseball/analyze";
 import {
   closeWindowReached,
   gradeKs,
@@ -137,13 +138,13 @@ const captureAndSettle = async (
 
   const settings = await settingsStore.load();
   const apiKey = settings.oddsApiIoKey ?? "";
-  const books = settings.userBooks.filter((b) => /bet365/i.test(b));
+  // Closing snapshot is the Bet365 price we actually bet — the bet book only.
   const propsCache = new Map<string, EventPitcherProps>();
   const eventProps = async (eventId: string): Promise<EventPitcherProps> => {
     const hit = propsCache.get(eventId);
     if (hit) return hit;
     const fetched = apiKey
-      ? await fetchPitcherProps({ eventId, apiKey, books }).catch(() => new Map())
+      ? await fetchPitcherProps({ eventId, apiKey, books: [BASEBALL_KS_BOOK] }).catch(() => new Map())
       : new Map();
     propsCache.set(eventId, fetched as EventPitcherProps);
     return fetched as EventPitcherProps;

@@ -205,6 +205,63 @@ describe("_buildEventPitcherProps", () => {
     expect(props.size).toBe(0);
   });
 
+  // DraftKings bundles props under one generic "Player Props" market; the prop
+  // type lives in the label parens ("(Pitcher Strikeouts)" / "(Outs Recorded)").
+  const dkPayload = {
+    id: "dk1",
+    bookmakers: {
+      DraftKings: [
+        {
+          name: "Player Props",
+          odds: [
+            { label: "Rhett Lowder (Pitcher Strikeouts)", hdp: 4.5, over: 1.9, under: 1.8 },
+            { label: "Rhett Lowder (Outs Recorded)", hdp: 16.5, over: 1.95, under: 1.85 },
+            { label: "Some Batter (Total Strikeouts)", hdp: 0.5, over: 1.5, under: 2.4 },
+          ],
+        },
+      ],
+    },
+  };
+
+  it("parses DraftKings generic Player Props by label type when DK is the ksBook", () => {
+    const props = _buildEventPitcherProps(dkPayload, ["DraftKings"], { ksBook: "DraftKings" });
+    const lowder = props.get(normalizeName("Rhett Lowder"));
+    expect(lowder!.ksLines[0]).toMatchObject({ line: 4.5, overDec: 1.9, underDec: 1.8 });
+    expect(lowder!.outsLine).toBe(16.5);
+  });
+
+  it("does NOT treat a batter '(Total Strikeouts)' label as a pitcher Ks line", () => {
+    const props = _buildEventPitcherProps(dkPayload, ["DraftKings"], { ksBook: "DraftKings" });
+    expect(props.has(normalizeName("Some Batter"))).toBe(false);
+  });
+
+  it("takes Outs from DraftKings even when it is NOT the ksBook (Bet365 default)", () => {
+    const props = _buildEventPitcherProps(dkPayload, ["DraftKings"]); // ksBook defaults to Bet365
+    const lowder = props.get(normalizeName("Rhett Lowder"));
+    // No Bet365 Ks here, so no bettable line — but the Outs anchor still lands.
+    expect(lowder!.ksLines).toHaveLength(0);
+    expect(lowder!.outsLine).toBe(16.5);
+  });
+
+  it("AVERAGES the Outs line across Bet365 and DraftKings", () => {
+    const combined = {
+      id: "c1",
+      bookmakers: {
+        Bet365: [
+          { name: "Pitcher Strikeouts O/U", odds: [{ label: "Rhett Lowder (1) (4.5)", hdp: 4.5, over: 1.87, under: 1.83 }] },
+          { name: "Pitcher Outs O/U", odds: [{ label: "Rhett Lowder (1) (17.5)", hdp: 17.5, over: 1.91, under: 1.89 }] },
+        ],
+        DraftKings: [
+          { name: "Player Props", odds: [{ label: "Rhett Lowder (Outs Recorded)", hdp: 16.5, over: 1.95, under: 1.85 }] },
+        ],
+      },
+    };
+    const props = _buildEventPitcherProps(combined, ["Bet365", "DraftKings"]);
+    const lowder = props.get(normalizeName("Rhett Lowder"));
+    expect(lowder!.ksLines).toHaveLength(1); // Ks from the bet book only
+    expect(lowder!.outsLine).toBe(17); // mean(17.5, 16.5)
+  });
+
   it("filters by requested books", () => {
     const mixedPayload = {
       id: "x",

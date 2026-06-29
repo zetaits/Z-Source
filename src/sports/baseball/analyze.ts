@@ -42,6 +42,25 @@ import {
 
 export const BASEBALL_ODDS_SLUG = "baseball";
 
+// Pitcher-prop books, hardcoded (personal app): Bet365 is the bet target and the
+// ksBook (Ks lines come from it); DraftKings adds an "Outs Recorded" line that
+// co-anchors batters-faced. Both must be among the odds-api.io account's allowed
+// bookmakers. Decoupled from the configurable userBooks (football/team markets).
+export const BASEBALL_PROP_BOOKS = ["Bet365", "DraftKings"];
+export const BASEBALL_KS_BOOK = "Bet365";
+
+/**
+ * Is a Ks side bettable? Requires BOTH a positive EV over threshold AND a market
+ * Pitcher Outs O/U anchor for batters-faced. The anchor requirement is empirical
+ * (n=37 audit, 2026-06-27): unanchored picks went 2/14 (−75% ROI) vs anchored
+ * 13/23 (+11%). Pure so it's unit-tested; analyze() gates the verdict on it.
+ */
+export const isBettableKs = (
+  ev: number,
+  lengthAnchored: boolean,
+  evThreshold: number,
+): boolean => ev >= evThreshold && lengthAnchored;
+
 const MLB_LEAGUE_NAME = "USA - MLB";
 const EV_THRESHOLD = 0.05; // 5% min EV to emit a play (conservative v1)
 const STRONG_EV_THRESHOLD = 0.1; // PLAY when EV >= this, else LEAN
@@ -218,7 +237,16 @@ const analyzePitcher = async (args: {
       ev: number,
       bookFair: number,
     ): PlayCandidate => {
-      const passes = ev >= EV_THRESHOLD;
+      // Length gate (empirical, n=37 audit 2026-06-27): the model only beats the
+      // book when a Pitcher Outs O/U line anchors batters-faced. Picks WITHOUT it
+      // (BF estimated from recent starts) went 2/14 (−75% ROI) vs 13/23 (+11%)
+      // WITH it — and the book withholding an Outs line is itself a signal the
+      // outing length is unpredictable. So an Outs-line anchor is REQUIRED to
+      // bet; unanchored selections stay PASS (near-miss rail) regardless of EV.
+      // This supersedes the model's softer bfAnchored (which accepts recent
+      // starts) for the betting decision only — the projection is unchanged.
+      const lengthAnchored = proj.inputsUsed.usedMarketOutsLine;
+      const passes = isBettableKs(ev, lengthAnchored, EV_THRESHOLD);
       const verdict: Verdict = !passes
         ? "PASS"
         : ev >= STRONG_EV_THRESHOLD
@@ -240,6 +268,7 @@ const analyzePitcher = async (args: {
             lineupConfirmed: proj.inputsUsed.lineupConfirmed,
             bfMean: proj.inputsUsed.bfMean,
             usedMarketOutsLine: proj.inputsUsed.usedMarketOutsLine,
+            lengthAnchored: proj.inputsUsed.usedMarketOutsLine,
             modelFairProb: fair,
             bookOverFair: bookFair,
             ev,
@@ -323,8 +352,12 @@ export const analyzeBaseball = async (args: AnalyzeArgs): Promise<AnalysisResult
   const settings = await settingsStore.load();
   if (!settings.oddsApiIoKey) return { ...baseEmpty(), status: "no-api-key" };
   const apiKey = settings.oddsApiIoKey;
-  // Props come from Bet365 only (Sbobet has none).
-  const propBooks = settings.userBooks.filter((b) => /bet365/i.test(b));
+  // Pitcher props live only on Bet365 (the bet target → ksBook) and DraftKings
+  // (a second "Outs Recorded" line, averaged into the BF anchor). Hardcoded —
+  // independent of the global userBooks list (which drives team-market odds and
+  // still carries the football books); these two are the only props sources and
+  // must match the odds-api.io account's allowed bookmakers.
+  const propBooks = BASEBALL_PROP_BOOKS;
 
   const { odds: oddsProvider } = resolveProviders(settings, BASEBALL_ODDS_SLUG);
 
@@ -371,7 +404,7 @@ export const analyzeBaseball = async (args: AnalyzeArgs): Promise<AnalysisResult
   // Parallel: props + probables/context + lineup.
   const [eventProps, schedule, lineup] = await Promise.all([
     withTimeout(
-      (s) => fetchPitcherProps({ eventId: oddsEventId, apiKey, books: propBooks, signal: s }),
+      (s) => fetchPitcherProps({ eventId: oddsEventId, apiKey, books: propBooks, ksBook: BASEBALL_KS_BOOK, signal: s }),
       LEG_TIMEOUT_MS,
       new Map() as EventPitcherProps,
       parentSignal,

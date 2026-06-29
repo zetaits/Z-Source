@@ -1,10 +1,18 @@
 // Pitcher player-prop fetcher for odds-api.io. The live /v3/odds endpoint does
 // NOT accept a `market=` query param — it returns ALL markets nested under
 // bookmakers[slug][] as { name, odds[] }, so we fetch the full event-odds for
-// the requested books and FILTER rows by market `name`. Strikeout O/U lines
-// come from Bet365 (Sbobet has no pitcher props). Pure of settings I/O: the
-// caller passes apiKey + books. Degrades gracefully — on HTTP/zod failure it
-// console.warns and returns an empty Map (props are optional; never throws).
+// the requested books and FILTER rows by market `name` (and, for books that
+// bundle props under a generic "Player Props" market, by the row LABEL's prop
+// type). Two book conventions are handled:
+//   - Bet365: one market per prop, name = "Pitcher Strikeouts O/U" /
+//     "Pitcher Outs O/U"; label = "Rhett Lowder (1) (4.5)" (line in the parens).
+//   - DraftKings: a single "Player Props" market; label = "Rhett Lowder
+//     (Pitcher Strikeouts)" / "(Outs Recorded)" with the line in `hdp`.
+// We BET Bet365, so the Ks lines (the bet target) come from the designated
+// ksBook (Bet365) only; the Outs line (a model BF anchor, not bet) is AVERAGED
+// across every book that reports it — more coverage + a less noisy anchor.
+// Pure of settings I/O: the caller passes apiKey + books. Degrades gracefully —
+// on HTTP/zod failure it console.warns and returns an empty Map (never throws).
 
 import { z } from "zod";
 import { httpRequest, HttpError } from "@/services/http/httpClient";
@@ -62,6 +70,29 @@ const isKsMarket = (name: string): boolean =>
 const isOutsMarket = (name: string): boolean =>
   /pitcher outs/i.test(name) || (/outs/i.test(name) && /o\/u|over\/under/i.test(name));
 
+// A pitcher prop type, or null if the row isn't one we model (batter props,
+// pitcher hits/ER, etc. are skipped in v1).
+type PropType = "ks" | "outs";
+
+/**
+ * Classify a row's prop type for books that bundle everything under a single
+ * generic market (DraftKings' "Player Props"): the type lives in the label's
+ * trailing parens, e.g. "Rhett Lowder (Pitcher Strikeouts)" / "(Outs Recorded)".
+ * STRICT to pitcher props — "(Total Strikeouts)" is a BATTER prop and must NOT
+ * match ks. Returns null for anything we don't bet on.
+ */
+const labelPropType = (label: string): PropType | null => {
+  const m = /\(([^)]*)\)\s*$/.exec(label.trim());
+  const type = m?.[1] ?? "";
+  if (/pitcher\s+strikeout/i.test(type)) return "ks";
+  if (/outs\s+recorded|pitching\s+outs|pitcher\s+outs/i.test(type)) return "outs";
+  return null;
+};
+
+// Books whose markets are named per-prop (Bet365-style). Others (DraftKings)
+// bundle props under a generic market and are classified by label instead.
+const isGenericPropMarket = (name: string): boolean => /^player props$/i.test(name);
+
 // Parse the player name from a prop label. The confirmed format is
 // "Rhett Lowder (1) (4.5)" — name, jersey seq, line. The strict anchored regex
 // gives a clean capture on that exact shape; if a provider naming-drift (missing
@@ -92,13 +123,18 @@ export const normalizeName = (raw: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-const median = (xs: number[]): number => {
-  const sorted = [...xs].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-};
+const mean = (xs: number[]): number =>
+  xs.reduce((a, b) => a + b, 0) / xs.length;
+
+/** Default book we BET (and thus take Ks lines from). */
+const DEFAULT_KS_BOOK = "bet365";
 
 // Pure builder (no HTTP) — exported for tests, per the codebase convention.
-const buildEventPitcherProps = (raw: unknown, books: string[]): EventPitcherProps => {
+const buildEventPitcherProps = (
+  raw: unknown,
+  books: string[],
+  opts: { ksBook?: string } = {},
+): EventPitcherProps => {
   const out: EventPitcherProps = new Map();
   const parsed = eventOddsSchema.safeParse(raw);
   if (!parsed.success) {
@@ -108,6 +144,8 @@ const buildEventPitcherProps = (raw: unknown, books: string[]): EventPitcherProp
   const bookmakers = parsed.data.bookmakers ?? {};
   // Requested books, case-insensitive (settings store "Bet365").
   const wanted = new Set(books.map((b) => b.toLowerCase()));
+  // Ks lines (the bet target) only come from the book we actually bet.
+  const ksBook = (opts.ksBook ?? DEFAULT_KS_BOOK).toLowerCase();
 
   const ensure = (name: string): PitcherProps => {
     const existing = out.get(name);
@@ -117,38 +155,54 @@ const buildEventPitcherProps = (raw: unknown, books: string[]): EventPitcherProp
     return created;
   };
 
-  // Accumulate candidate outs lines per player to pick the median if several.
-  const outsByPlayer = new Map<string, number[]>();
+  // One Outs line per player PER BOOK, then averaged across books (a less noisy,
+  // higher-coverage BF anchor than either book alone). Keyed player -> book -> line.
+  const outsByPlayer = new Map<string, Map<string, number>>();
 
   for (const [bookKey, markets] of Object.entries(bookmakers)) {
     if (wanted.size > 0 && !wanted.has(bookKey.toLowerCase())) continue;
+    const isKsBook = bookKey.toLowerCase() === ksBook;
     for (const market of markets) {
-      const ks = isKsMarket(market.name);
-      const outs = !ks && isOutsMarket(market.name);
-      if (!ks && !outs) continue;
+      const generic = isGenericPropMarket(market.name);
+      // Bet365-style: the market name carries the type. Generic (DraftKings):
+      // resolved per-row from the label below.
+      const marketType: PropType | null = generic
+        ? null
+        : isKsMarket(market.name)
+          ? "ks"
+          : isOutsMarket(market.name)
+            ? "outs"
+            : null;
+      if (!generic && marketType === null) continue;
 
       for (const row of market.odds ?? []) {
         if (!row.label) continue;
+        const type = generic ? labelPropType(row.label) : marketType;
+        if (type === null) continue;
+
         const player = normalizeName(parsePlayerName(row.label));
         if (!player) continue;
         const line = row.hdp ?? row.line;
         if (line === undefined) continue;
 
-        if (ks) {
+        if (type === "ks") {
+          // Only bet-book Ks lines (we place bets on that book), two-way priced.
+          if (!isKsBook) continue;
           if (row.over === undefined || row.under === undefined) continue;
           ensure(player).ksLines.push({ line, overDec: row.over, underDec: row.under });
         } else {
-          const arr = outsByPlayer.get(player) ?? [];
-          arr.push(line);
-          outsByPlayer.set(player, arr);
+          const byBook = outsByPlayer.get(player) ?? new Map<string, number>();
+          byBook.set(bookKey, line); // last line for this book wins (one per book)
+          outsByPlayer.set(player, byBook);
         }
       }
     }
   }
 
-  for (const [player, lines] of outsByPlayer) {
+  for (const [player, byBook] of outsByPlayer) {
+    const lines = [...byBook.values()];
     if (lines.length === 0) continue;
-    ensure(player).outsLine = median(lines);
+    ensure(player).outsLine = mean(lines);
   }
 
   return out;
@@ -167,9 +221,11 @@ export const fetchPitcherProps = async (args: {
   eventId: string;
   apiKey: string;
   books: string[];
+  /** Book whose Ks lines we bet (default Bet365); others contribute Outs only. */
+  ksBook?: string;
   signal?: AbortSignal;
 }): Promise<EventPitcherProps> => {
-  const { eventId, apiKey, books, signal } = args;
+  const { eventId, apiKey, books, ksBook, signal } = args;
   if (!apiKey) return new Map();
 
   const bookmakersParam = books.length > 0 ? books.join(",") : undefined;
@@ -188,7 +244,7 @@ export const fetchPitcherProps = async (args: {
     });
     oddsApiIoQuota.observeHeaders(res.headers);
     oddsApiIoQuota.recordRequest();
-    return buildEventPitcherProps(await res.json(), books);
+    return buildEventPitcherProps(await res.json(), books, { ksBook });
   } catch (err) {
     // Props are optional — downgrade every error to an empty result rather than
     // rethrow, so a missing/limited props feed never breaks the analysis.
@@ -207,4 +263,5 @@ export {
   parsePlayerName as _parsePlayerName,
   isKsMarket as _isKsMarket,
   isOutsMarket as _isOutsMarket,
+  labelPropType as _labelPropType,
 };
