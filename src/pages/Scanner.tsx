@@ -48,7 +48,7 @@ interface LeagueGroup {
 // re-label every screen, but their board shows the "feed not yet enabled"
 // empty state until a provider is keyed to them. Add an id here once its
 // fixtures are fetched per sport.id from the engine.
-const SPORTS_WITH_FEED = new Set<string>(["football", "baseball"]);
+const SPORTS_WITH_FEED = new Set<string>(["football", "baseball", "tennis"]);
 
 const targetLocalDayKey = (offset: number): string => {
   const d = new Date();

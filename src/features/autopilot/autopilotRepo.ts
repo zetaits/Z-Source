@@ -9,10 +9,17 @@ const CONFIG_KEY = "autopilot:config";
 const SEEN_KEY = "autopilot:seen";
 
 export interface AutopilotConfig {
+  /** Master switch. */
   enabled: boolean;
+  /** Per-sport execution toggles. Missing key = enabled (opt-out model). */
+  sports?: Record<string, boolean>;
 }
 
-const DEFAULT_CONFIG: AutopilotConfig = { enabled: false };
+const DEFAULT_CONFIG: AutopilotConfig = { enabled: false, sports: {} };
+
+/** A sport driver runs unless explicitly toggled off. */
+export const isSportEnabled = (cfg: AutopilotConfig, sportId: string): boolean =>
+  cfg.sports?.[sportId] !== false;
 
 const readJson = async <T>(key: string, fallback: T): Promise<T> => {
   const db = await getStorage();
@@ -42,13 +49,13 @@ export const autopilotRepo = {
 
   saveConfig: (cfg: AutopilotConfig): Promise<void> => writeJson(CONFIG_KEY, cfg),
 
-  /** gamePk -> last-analyzed epoch ms. */
+  /** sport-prefixed event key -> last-analyzed epoch ms. */
   loadSeen: (): Promise<Record<string, number>> =>
     readJson<Record<string, number>>(SEEN_KEY, {}),
 
-  async markSeen(gamePk: number, atMs: number): Promise<void> {
+  async markSeen(key: string, atMs: number): Promise<void> {
     const seen = await this.loadSeen();
-    seen[String(gamePk)] = atMs;
+    seen[key] = atMs;
     await writeJson(SEEN_KEY, seen);
   },
 };

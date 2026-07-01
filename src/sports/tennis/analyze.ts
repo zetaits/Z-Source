@@ -32,6 +32,7 @@ import {
   type SackmannData,
 } from "./sackmannData";
 import { fetchTennisProps, type TennisMatchOdds } from "./oddsProps";
+import { TENNIS_SOURCE } from "./providers";
 // EV/confidence thresholds are the single source of truth in model/constants.ts.
 import {
   EV_THRESHOLD,
@@ -189,7 +190,7 @@ export const analyzeTennis = async (args: AnalyzeArgs): Promise<AnalysisResult> 
   // Tennis fixtures ARE odds-api.io events (data-coder sets source = "odds-api-io"
   // in providers.ts). catalogId is the event id — trivial resolution, unlike
   // baseball where statsapi provides the gamePk as catalogId.
-  if (match.source !== "odds-api-io") {
+  if (match.source !== TENNIS_SOURCE) {
     return {
       ...baseEmpty(),
       status: "error",

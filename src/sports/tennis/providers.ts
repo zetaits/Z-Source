@@ -18,7 +18,8 @@ import { isPersistentStorage } from "@/storage";
 import { matchesCacheRepo } from "@/storage/repos/matchesCacheRepo";
 
 const IO_BASE = "https://api.odds-api.io/v3";
-const SOURCE = "tennis-odds-api-io";
+/** CatalogMatch.source tag for tennis fixtures. analyze.ts gates on this exact value. */
+export const TENNIS_SOURCE = "tennis-odds-api-io";
 
 // Subset of the odds-api.io event list item; mirrors ioEventListItemSchema in
 // oddsApiIoProvider.ts but adds nothing extra — tennis events have the same shape.
@@ -48,11 +49,20 @@ const leagueTour = (name: string): Tour | null => {
 };
 
 /**
- * Exclude ITF, Futures, and sub-circuit events (W15K, W25K, M15K etc.) that
- * lack the depth of odds / stat data needed for analysis.
+ * Exclude ITF, Futures, and sub-circuit events (W15K, W25K, M15K etc.), plus
+ * doubles / mixed / junior draws and qualifying — the model prices singles main
+ * draw only, and Tennis Abstract Elo doesn't cover juniors/ITF.
  */
 const isMainTourLeague = (name: string): boolean =>
-  !(/\bITF\b|\bFutures\b|\b[MW]\d+K\b/i.test(name));
+  !(/\bITF\b|\bFutures\b|\b[MW]\d+K\b|doubles|mixed|junior|qualif/i.test(name));
+
+/**
+ * Skip feed placeholder participants that aren't a named player yet — qualifying
+ * draw slots ("R32P21"), "Qualifier", "Bye", "Winner/Loser of…". They can't be
+ * matched to Elo or bet, and pollute the slate.
+ */
+const isPlaceholderName = (n: string): boolean =>
+  /^[RQ]\d+P?\d*$/i.test(n.trim()) || /^(bye|qualifier|winner|loser)\b/i.test(n.trim());
 
 // ---------------------------------------------------------------------------
 // Status mapping
@@ -91,7 +101,7 @@ const toCatalogMatch = (ev: RawEvent, tour: Tour): CatalogMatch | null => {
 
   return {
     catalogId,
-    source: SOURCE,
+    source: TENNIS_SOURCE,
     leagueId: LeagueId(tourLeagueId(tour)),
     leagueName,
     countryCode: "INT",
@@ -171,6 +181,9 @@ export const fetchTennisWindowFixtures = async (
     const leagueName = ev.league?.name ?? "";
     const tour = leagueTour(leagueName);
     if (!tour || !isMainTourLeague(leagueName)) continue;
+    // Drop doubles pairs ("A / B") and unresolved placeholder slots.
+    if (/\//.test(ev.home ?? "") || /\//.test(ev.away ?? "")) continue;
+    if (isPlaceholderName(ev.home ?? "") || isPlaceholderName(ev.away ?? "")) continue;
     const m = toCatalogMatch(ev, tour);
     if (m) out.push(m);
   }
