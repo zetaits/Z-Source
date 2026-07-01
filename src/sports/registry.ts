@@ -2,6 +2,7 @@ import { DEFAULT_SPORT_ID } from "@/config/sports";
 import type { SportModule } from "./contracts";
 import { footballModule } from "./football";
 import { baseballModule } from "./baseball";
+import { tennisModule } from "./tennis";
 import { createStubModule } from "./stubModule";
 
 /**
@@ -13,7 +14,7 @@ const MODULES: Record<string, SportModule> = {
   football: footballModule,
   baseball: baseballModule,
   basketball: createStubModule("basketball", "basketball_nba"),
-  tennis: createStubModule("tennis", "tennis_atp"),
+  tennis: tennisModule,
   amfootball: createStubModule("amfootball", "americanfootball_nfl"),
 };
 

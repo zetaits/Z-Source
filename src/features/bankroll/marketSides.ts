@@ -41,6 +41,9 @@ const DC_SIDES: SideOption[] = [
 export const MARKET_SIDES: Record<MarketKey, MarketSidesConfig> = {
   ML_1X2: { sides: HOME_DRAW_AWAY, hasLine: false },
   ML_HT: { sides: HOME_DRAW_AWAY, hasLine: false },
+  ML_TENNIS: { sides: HOME_AWAY, hasLine: false },
+  OU_GAMES: { sides: OVER_UNDER, hasLine: true, lineHint: "20.5, 21.5, 22.5…" },
+  AH_GAMES: { sides: HOME_AWAY, hasLine: true, lineHint: "−3.5, −1.5, +2.5…" },
   DNB: { sides: HOME_AWAY, hasLine: false },
   AH: { sides: HOME_AWAY, hasLine: true, lineHint: "−0.5, +1, +1.25…" },
   OU_GOALS: { sides: OVER_UNDER, hasLine: true, lineHint: "1.5, 2.5, 3.5…" },

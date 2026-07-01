@@ -18,7 +18,11 @@ export type MarketKey =
   | "SAVES_GK"
   | "TACKLES_TOTAL"
   | "THROWINS_OU"
-  | "PITCHER_KS";
+  | "PITCHER_KS"
+  // Tennis
+  | "ML_TENNIS"   // Match winner (two-way; no draw)
+  | "OU_GAMES"    // Total games in match over/under
+  | "AH_GAMES";   // Games handicap (Asian handicap on game count)
 
 export type MarketGroup = "main" | "secondary";
 
